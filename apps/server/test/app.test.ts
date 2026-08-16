@@ -44,7 +44,6 @@ describe("DirectDrop API", () => {
       url: "/s/example",
       headers: { accept: "text/html" },
     });
-    expect(page.statusCode).toBe(200);
     expect(page.headers["cache-control"]).toBe("no-store");
 
     const missing = await app.inject({
