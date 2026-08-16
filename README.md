@@ -19,7 +19,14 @@ DirectDrop은 클라우드에 파일을 올리지 않고, 내 컴퓨터에서 �
 
 [GitHub Releases의 최신 DirectDrop 다운로드](https://github.com/HechoLP/directdrop/releases/latest)
 
-v0.1.0 설치 프로그램은 현재 코드 서명되지 않았습니다. Windows SmartScreen 또는 macOS Gatekeeper가 경고할 수 있으므로, 릴리스의 `SHA256SUMS.txt`와 저장소 소스를 확인하세요.
+Windows 설치 프로그램은 현재 코드 서명되지 않았고 macOS 앱은 ad-hoc 서명 상태라 SmartScreen 또는 Gatekeeper가 경고할 수 있습니다. 릴리스의 `SHA256SUMS.txt`와 저장소 소스를 확인하세요.
+
+macOS에서 DirectDrop을 `Applications` 폴더로 복사한 뒤 손상되었다는 경고가 나오면 터미널에서 아래 명령을 실행하세요.
+
+```bash
+xattr -dr com.apple.quarantine /Applications/DirectDrop.app
+open /Applications/DirectDrop.app
+```
 
 ## 전송 구조
 

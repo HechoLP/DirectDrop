@@ -15,12 +15,15 @@ jobs:
         include:
           - platform: macos-latest
             target: aarch64-apple-darwin
+            asset_name: macOS-Apple-Silicon-arm64
             args: --target aarch64-apple-darwin --bundles dmg
           - platform: macos-latest
             target: x86_64-apple-darwin
+            asset_name: macOS-Intel-x64
             args: --target x86_64-apple-darwin --bundles dmg
           - platform: windows-latest
             target: x86_64-pc-windows-msvc
+            asset_name: Windows-x64
             args: --target x86_64-pc-windows-msvc --bundles nsis,msi
     runs-on: ${{ matrix.platform }}
     steps:
@@ -49,23 +52,36 @@ jobs:
           releaseName: DirectDrop v__VERSION__
           releaseBody: |
             ## What's New
-            - Single-viewport desktop layout that fits the supported 600x620 minimum window without page scrolling
-            - Active-share list showing the share link, every file, file sizes, total size, downloads and remaining time
-            - Shares now disappear immediately at expiration while DirectDrop cleans up the connection and metadata
-            - Modern, calm interface inspired by Apple and Toss design principles
+            - Separate Upload and Share List views for predictable navigation
+            - Start a new upload without losing the current active link until new files are chosen
+            - View the active link, every uploaded file, file sizes, total size, downloads and remaining time
+            - Clear Apple Silicon and Intel macOS installer names
             - Direct WebRTC P2P file transfer with no cloud file storage
             - Temporary links, QR sharing, download limits, expiration and password protection
             - Responsive browser receiver and Windows/macOS desktop apps
 
+            ## macOS에서 처음 실행할 때
+            이 릴리스는 아직 Apple 공증 전입니다. `Applications` 폴더에 DirectDrop을 복사하고, 릴리스의 `SHA256SUMS.txt`로 파일을 확인한 뒤 터미널에서 아래 명령을 실행하세요.
+
+            ```bash
+            xattr -dr com.apple.quarantine /Applications/DirectDrop.app
+            open /Applications/DirectDrop.app
+            ```
+
             ## Known Issues
-            - This release is unsigned and not notarized. Windows SmartScreen or macOS Gatekeeper may warn.
+            - The macOS app uses ad-hoc signing and is not Apple-notarized yet. Run the commands above if Gatekeeper blocks it.
+            - The Windows app is unsigned, so SmartScreen may warn.
             - Some NAT/firewall combinations require an optional TURN server.
 
             ## Downloads
-            Choose the installer for your OS and verify it with SHA256SUMS.txt.
+            - Apple Silicon Mac (M1/M2/M3/M4/M5): `macOS-Apple-Silicon-arm64.dmg`
+            - Intel Mac: `macOS-Intel-x64.dmg`
+            - Windows 64-bit: `Windows-x64`
+
+            Choose the installer for your OS and verify it with `SHA256SUMS.txt`.
           releaseDraft: false
           prerelease: false
-          releaseAssetNamePattern: DirectDrop-v[version]-[platform]-[arch][setup][ext]
+          releaseAssetNamePattern: DirectDrop-v[version]-${{ matrix.asset_name }}[setup][ext]
           args: ${{ matrix.args }}
 
   checksums:
