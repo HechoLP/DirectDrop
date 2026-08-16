@@ -13,7 +13,7 @@
     "dev": "pnpm --parallel --filter @directdrop/server --filter @directdrop/web dev",
     "dev:desktop": "pnpm --filter @directdrop/desktop tauri dev",
     "lint": "pnpm -r --if-present lint",
-    "typecheck": "pnpm -r --if-present typecheck",
+    "typecheck": "pnpm --filter './packages/**' build && pnpm -r --if-present typecheck",
     "test": "pnpm -r --if-present test",
     "build": "pnpm -r --if-present build",
     "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build",

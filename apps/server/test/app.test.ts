@@ -34,6 +34,25 @@ describe("DirectDrop API", () => {
       service: "DirectDrop",
       fileStorage: false,
     });
+    expect(response.headers["cache-control"]).toBe("no-store");
+  });
+
+  it("prevents stale HTML and missing-resource responses from being cached", async () => {
+    const app = await testApp();
+    const page = await app.inject({
+      method: "GET",
+      url: "/s/example",
+      headers: { accept: "text/html" },
+    });
+    expect(page.statusCode).toBe(200);
+    expect(page.headers["cache-control"]).toBe("no-store");
+
+    const missing = await app.inject({
+      method: "GET",
+      url: "/missing.js",
+    });
+    expect(missing.statusCode).toBe(404);
+    expect(missing.headers["cache-control"]).toBe("no-store");
   });
 
   it("creates and retrieves a share without exposing its control key", async () => {

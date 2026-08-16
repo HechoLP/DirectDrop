@@ -69,6 +69,8 @@ export function ReceiverPage({ token }: { token: string }) {
   const senderPeerRef = useRef<string | null>(null);
   const sessionRef = useRef<string | null>(null);
   const savePlanRef = useRef<SavePlan | null>(null);
+  const metadataRef = useRef<ShareMetadata | undefined>(undefined);
+  const runtimeRef = useRef<PublicRuntimeConfig | undefined>(undefined);
   const pendingCandidatesRef = useRef<
     Array<{ sessionId: string; candidate: RTCIceCandidateInit }>
   >([]);
@@ -93,14 +95,23 @@ export function ReceiverPage({ token }: { token: string }) {
     [send],
   );
 
+  useEffect(() => {
+    metadataRef.current = metadata;
+  }, [metadata]);
+  useEffect(() => {
+    runtimeRef.current = runtime;
+  }, [runtime]);
+
   const createPeer = useCallback(
     async (offer: Extract<ServerMessage, { type: "OFFER" }>) => {
-      if (!runtime || !metadata || !savePlanRef.current)
+      const currentRuntime = runtimeRef.current;
+      const currentMetadata = metadataRef.current;
+      if (!currentRuntime || !currentMetadata || !savePlanRef.current)
         throw new Error("TRANSFER_NOT_READY");
       peerRef.current?.close();
-      const iceServers = metadata.allowRelay
-        ? runtime.iceServers
-        : runtime.iceServers.filter((server) => !isTurnServer(server));
+      const iceServers = currentMetadata.allowRelay
+        ? currentRuntime.iceServers
+        : currentRuntime.iceServers.filter((server) => !isTurnServer(server));
       const peer = new RTCPeerConnection({ iceServers });
       peerRef.current = peer;
       senderPeerRef.current = offer.peerId;
@@ -164,7 +175,7 @@ export function ReceiverPage({ token }: { token: string }) {
         send({ type: "TRANSFER_STARTED", sessionId: offer.sessionId });
         attachReceiverChannel({
           channel: event.channel,
-          files: metadata.files,
+          files: currentMetadata.files,
           savePlan: savePlanRef.current!,
           onProgress: setProgress,
           onComplete: () => {
@@ -193,7 +204,7 @@ export function ReceiverPage({ token }: { token: string }) {
         sdp: answer.sdp,
       });
     },
-    [fail, metadata, runtime, send],
+    [fail, send],
   );
 
   useEffect(() => {
@@ -201,6 +212,8 @@ export function ReceiverPage({ token }: { token: string }) {
     Promise.all([getShare(token), getRuntimeConfig()])
       .then(([share, config]) => {
         if (!active) return;
+        metadataRef.current = share;
+        runtimeRef.current = config;
         setMetadata(share);
         setRuntime(config);
         setPhase("ready");
@@ -218,23 +231,30 @@ export function ReceiverPage({ token }: { token: string }) {
   }, [fail, token]);
 
   useEffect(() => {
-    if (!runtime) return;
-    const socket = new WebSocket(runtime.signalingUrl);
+    const activeSignalingUrl = runtime?.signalingUrl;
+    if (!activeSignalingUrl) return;
+    const socket = new WebSocket(activeSignalingUrl);
     socketRef.current = socket;
     socket.onopen = () => send({ type: "JOIN_SHARE", shareToken: token });
     socket.onmessage = (event) => {
       const message = JSON.parse(event.data as string) as ServerMessage;
-      if (message.type === "SHARE_STATE")
-        setMetadata((current) =>
-          current
-            ? {
-                ...current,
-                senderOnline: message.senderOnline,
-                status: message.status,
-              }
-            : current,
-        );
-      else if (message.type === "DOWNLOAD_ACCEPTED") {
+      if (message.type === "SHARE_STATE") {
+        setMetadata((current) => {
+          if (
+            !current ||
+            (current.senderOnline === message.senderOnline &&
+              current.status === message.status)
+          )
+            return current;
+          const next = {
+            ...current,
+            senderOnline: message.senderOnline,
+            status: message.status,
+          };
+          metadataRef.current = next;
+          return next;
+        });
+      } else if (message.type === "DOWNLOAD_ACCEPTED") {
         sessionRef.current = message.sessionId;
         senderPeerRef.current = message.peerId;
         setPhase("connecting");
@@ -264,14 +284,16 @@ export function ReceiverPage({ token }: { token: string }) {
       socket.close();
       peerRef.current?.close();
     };
-  }, [createPeer, fail, runtime, send, token]);
+  }, [createPeer, fail, runtime?.signalingUrl, send, token]);
 
   const unlock = async (event: React.FormEvent) => {
     event.preventDefault();
     try {
       const grant = await verifySharePassword(token, password);
       setAccessToken(grant);
-      setMetadata(await getShare(token, grant));
+      const unlocked = await getShare(token, grant);
+      metadataRef.current = unlocked;
+      setMetadata(unlocked);
       setPassword("");
     } catch {
       setError("비밀번호가 올바르지 않습니다.");

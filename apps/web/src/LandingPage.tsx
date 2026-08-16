@@ -64,6 +64,7 @@ export function LandingPage() {
 
           <div
             className="rounded-[28px] border border-slate-200 bg-white p-4 sm:p-6"
+            role="img"
             aria-label="DirectDrop 전송 흐름"
           >
             <div className="rounded-2xl bg-slate-50 p-5 sm:p-7">

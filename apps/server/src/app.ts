@@ -57,6 +57,18 @@ export async function buildApp(
   });
   const grants = new Map<string, AccessGrant>();
 
+  app.addHook("onSend", async (request, reply, payload) => {
+    if (
+      request.url === "/health" ||
+      request.url === "/ws" ||
+      request.url.startsWith("/api/") ||
+      request.headers.accept?.includes("text/html")
+    ) {
+      reply.header("cache-control", "no-store");
+    }
+    return payload;
+  });
+
   const validateAccessToken = (shareId: string, token: string | undefined) => {
     if (!token) return false;
     const grant = grants.get(token);
@@ -194,14 +206,30 @@ export async function buildApp(
     fileURLToPath(new URL("../../web/dist", import.meta.url)),
   );
   if (existsSync(webRoot)) {
-    await app.register(fastifyStatic, { root: webRoot, wildcard: false });
+    await app.register(fastifyStatic, {
+      root: webRoot,
+      wildcard: false,
+      setHeaders(response, filePath) {
+        if (filePath.startsWith(resolve(webRoot, "assets"))) {
+          response.header(
+            "cache-control",
+            "public, max-age=31536000, immutable",
+          );
+        } else {
+          response.header("cache-control", "no-store");
+        }
+      },
+    });
     app.setNotFoundHandler((request, reply) => {
       if (
         request.method === "GET" &&
         request.headers.accept?.includes("text/html")
       )
         return reply.sendFile("index.html");
-      return reply.code(404).send({ error: "NOT_FOUND" });
+      return reply
+        .header("cache-control", "no-store")
+        .code(404)
+        .send({ error: "NOT_FOUND" });
     });
   }
 

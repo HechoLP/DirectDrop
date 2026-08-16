@@ -9,7 +9,9 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "build": "tsc -p tsconfig.build.json",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "verify:public": "node scripts/verify-public.mjs",
+    "verify:browser-share": "node scripts/hold-browser-share.mjs"
   },
   "dependencies": {
     "@directdrop/protocol": "workspace:*",
