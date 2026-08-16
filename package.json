@@ -1,0 +1,33 @@
+{
+  "name": "directdrop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Direct P2P file sharing with no cloud file storage.",
+  "license": "MIT",
+  "packageManager": "pnpm@11.19.0",
+  "engines": {
+    "node": ">=22.0.0",
+    "pnpm": ">=10.0.0"
+  },
+  "scripts": {
+    "dev": "pnpm --parallel --filter @directdrop/server --filter @directdrop/web dev",
+    "dev:desktop": "pnpm --filter @directdrop/desktop tauri dev",
+    "lint": "pnpm -r --if-present lint",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "test": "pnpm -r --if-present test",
+    "build": "pnpm -r --if-present build",
+    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "devDependencies": {
+    "@eslint/js": "latest",
+    "@types/node": "latest",
+    "eslint": "^10.8.1",
+    "eslint-plugin-react-hooks": "latest",
+    "globals": "latest",
+    "prettier": "latest",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "latest"
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "DirectDrop",
+  "version": "0.1.0",
+  "identifier": "dev.dlfkd.directdrop",
+  "build": {
+    "beforeDevCommand": "pnpm dev",
+    "devUrl": "http://localhost:5174",
+    "beforeBuildCommand": "pnpm build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "DirectDrop",
+        "width": 1040,
+        "height": 760,
+        "minWidth": 600,
+        "minHeight": 620,
+        "center": true,
+        "resizable": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; connect-src 'self' https://share.dlfkd.dev wss://share.dlfkd.dev http://localhost:8787 ws://localhost:8787; script-src 'self'"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "copyright": "Copyright © 2026 DirectDrop contributors",
+    "category": "Utility",
+    "shortDescription": "Direct files. No cloud.",
+    "longDescription": "DirectDrop transfers files directly between devices using WebRTC P2P without cloud file storage.",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ]
+  }
+}

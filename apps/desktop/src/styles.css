@@ -1,0 +1,45 @@
+@import "tailwindcss";
+@source "../../../packages/ui/src";
+
+:root {
+  font-family:
+    "Noto Sans KR", "Apple SD Gothic Neo", Pretendard, system-ui, sans-serif;
+  color: #0f172a;
+  background: #f8fafc;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+* {
+  box-sizing: border-box;
+}
+html,
+body,
+#root {
+  min-width: 600px;
+  min-height: 100%;
+  margin: 0;
+}
+body {
+  min-height: 100dvh;
+  overflow-x: hidden;
+  background: #f8fafc;
+}
+button,
+input,
+select {
+  font: inherit;
+  touch-action: manipulation;
+}
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
