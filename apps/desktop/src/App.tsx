@@ -11,21 +11,27 @@ import {
 import {
   AlertTriangle,
   ArrowLeft,
+  ArrowRight,
   Bell,
   Check,
   ChevronRight,
-  CloudOff,
+  Clock3,
   Copy,
   Download,
   FilePlus2,
   Files,
+  FolderOpen,
   Globe2,
-  Info,
+  History,
+  Inbox,
+  Laptop,
   Link2,
   LoaderCircle,
+  LockKeyhole,
   Play,
   QrCode,
   Radio,
+  Send,
   Settings2,
   Share2,
   ShieldCheck,
@@ -56,7 +62,7 @@ import {
 import { scheduleShareExpiration } from "./share-expiration";
 import { SenderTransfer } from "./sender-transfer";
 import { LanShareWorkspace } from "./LanShareWorkspace";
-import { productModes, type ProductMode } from "./product-mode";
+import type { ProductMode } from "./product-mode";
 import {
   isTauri,
   quitApp,
@@ -64,11 +70,6 @@ import {
   removeLocalFiles,
   setActiveShareCount,
 } from "./tauri";
-import {
-  resolveVisualState,
-  visualStateCopy,
-  type AppVisualState,
-} from "./visual-state";
 
 const apiBase =
   import.meta.env.VITE_PUBLIC_APP_URL ??
@@ -90,7 +91,8 @@ type TransferRow = {
   peerId: string;
 };
 type PendingRequest = { sessionId: string; peerId: string };
-type ShareView = "upload" | "list" | "detail";
+type ShareView = "upload" | "history" | "received" | "list" | "detail";
+type SendStage = "files" | "next";
 
 async function notify(title: string, body: string) {
   let granted = await isPermissionGranted();
@@ -116,6 +118,8 @@ export function App() {
   const [productMode, setProductMode] = useState<ProductMode>("directdrop");
   const [tab, setTab] = useState<"share" | "about">("share");
   const [shareView, setShareView] = useState<ShareView>("upload");
+  const [sendStage, setSendStage] = useState<SendStage>("files");
+  const [isDragging, setIsDragging] = useState(false);
   const [showQr, setShowQr] = useState(false);
   const [pending, setPending] = useState<PendingRequest>();
   const [transfers, setTransfers] = useState<Record<string, TransferRow>>({});
@@ -130,26 +134,9 @@ export function App() {
   const productModeRef = useRef(productMode);
   const notificationsRef = useRef(notificationsEnabled);
 
-  const totalSize = useMemo(
-    () => files.reduce((sum, file) => sum + file.size, 0),
-    [files],
-  );
   const completedDownloads = Object.values(transfers).filter(
     (transfer) => transfer.state === "COMPLETED",
   ).length;
-  const visualState =
-    productMode === "directdrop" || tab === "about"
-      ? resolveVisualState({
-          tab,
-          fileCount: shareView === "upload" && !share ? files.length : 0,
-          hasShare: shareView !== "upload" && Boolean(share),
-          online,
-          transferStates: Object.values(transfers).map(
-            (transfer) => transfer.state,
-          ),
-          hasError: Boolean(error),
-        })
-      : "select";
 
   useEffect(() => {
     filesRef.current = files;
@@ -200,6 +187,9 @@ export function App() {
         filesRef.current = nextFiles;
         return nextFiles;
       });
+      setTab("share");
+      setShareView("upload");
+      setSendStage("files");
       setError(undefined);
     } catch (pathError) {
       setError(
@@ -213,6 +203,9 @@ export function App() {
     try {
       const registered = await registerFiles(paths);
       setLanFiles((current) => [...current, ...registered]);
+      setTab("share");
+      setShareView("upload");
+      setSendStage("files");
       setLanError(undefined);
     } catch (pathError) {
       setLanError(
@@ -242,6 +235,7 @@ export function App() {
     setPending(undefined);
     setShowQr(false);
     setShareView("upload");
+    setSendStage("files");
     await Promise.all([
       fetch(`${apiBase}/api/shares/${activeShare.token}`, {
         method: "DELETE",
@@ -257,10 +251,17 @@ export function App() {
     const cleanups: Array<() => void> = [];
     void getCurrentWebview()
       .onDragDropEvent((event) => {
+        if (event.payload.type === "enter" || event.payload.type === "over") {
+          setIsDragging(true);
+          return;
+        }
+        setIsDragging(false);
         if (event.payload.type !== "drop") return;
-        if (productModeRef.current === "lan-share")
+        if (productModeRef.current === "lan-share") {
           void addLanPaths(event.payload.paths);
-        else void addSharePaths(event.payload.paths);
+        } else {
+          void addSharePaths(event.payload.paths);
+        }
       })
       .then((unlisten) => {
         if (disposed) unlisten();
@@ -317,6 +318,7 @@ export function App() {
     if (!shareRef.current) {
       setTab("share");
       setShareView("upload");
+      setSendStage("files");
       await selectFiles();
       return;
     }
@@ -336,6 +338,7 @@ export function App() {
     await stopShare();
     setTab("share");
     setShareView("upload");
+    setSendStage("files");
     await addSharePaths(paths);
   };
 
@@ -581,265 +584,292 @@ export function App() {
     anchor.click();
   };
 
-  return (
-    <div className={`dd-app dd-state-${visualState}`}>
-      <header className="dd-topbar">
-        <div className="dd-topbar-inner mx-auto flex h-16 max-w-5xl items-center justify-between px-5 lg:px-8">
-          <div className="dd-topbar-brand">
-            <BrandMark />
-          </div>
-          <nav className="dd-nav flex items-center" aria-label="앱 메뉴">
-            <Button
-              onClick={() => {
-                setTab("share");
-                setProductMode("directdrop");
-              }}
-              aria-current={
-                tab === "share" && productMode === "directdrop"
-                  ? "page"
-                  : undefined
-              }
-              className={`dd-nav-button ${tab === "share" && productMode === "directdrop" ? "is-active" : ""}`}
-            >
-              <Globe2 aria-hidden="true" size={17} /> DirectDrop
-              {share && <span className="dd-nav-count">1</span>}
-            </Button>
-            <Button
-              onClick={() => {
-                setTab("share");
-                setProductMode("lan-share");
-              }}
-              aria-current={
-                tab === "share" && productMode === "lan-share"
-                  ? "page"
-                  : undefined
-              }
-              className={`dd-nav-button ${tab === "share" && productMode === "lan-share" ? "is-active" : ""}`}
-            >
-              <Zap aria-hidden="true" size={17} /> LAN Share
-              {lanFiles.length > 0 && (
-                <span className="dd-nav-count">{lanFiles.length}</span>
-              )}
-            </Button>
-            <Button
-              onClick={() => setTab("about")}
-              aria-current={tab === "about" ? "page" : undefined}
-              className={`dd-nav-button ${tab === "about" ? "is-active" : ""}`}
-            >
-              <Info aria-hidden="true" size={17} /> 정보
-            </Button>
-          </nav>
-        </div>
-      </header>
+  const activeFiles = productMode === "directdrop" ? files : lanFiles;
+  const activeTotalSize = activeFiles.reduce((sum, file) => sum + file.size, 0);
+  const activeError = productMode === "directdrop" ? error : lanError;
+  const deviceOnline =
+    typeof navigator === "undefined" ? false : navigator.onLine;
 
-      <main className="dd-workspace mx-auto max-w-5xl px-5 lg:px-8">
-        {tab === "about" ? (
-          <About
-            autoStart={autoStart}
-            notificationsEnabled={notificationsEnabled}
-            onNotificationsEnabled={setNotificationsEnabled}
-            onAutoStart={async (enabled) => {
-              if (enabled) await enable();
-              else await disable();
-              setAutoStart(enabled);
+  const showSend = (mode: ProductMode = productMode) => {
+    setTab("share");
+    setProductMode(mode);
+    setShareView("upload");
+    setSendStage("files");
+  };
+
+  const selectActiveFiles =
+    productMode === "directdrop" ? selectFiles : selectLanFiles;
+  const removeActiveFile =
+    productMode === "directdrop" ? removeFile : removeLanFile;
+
+  return (
+    <div className="dd-app" data-dragging={isDragging || undefined}>
+      <aside className="dd-sidebar">
+        <div className="dd-sidebar-brand">
+          <BrandMark inverse />
+        </div>
+
+        <nav className="dd-sidebar-nav" aria-label="주 메뉴">
+          <button
+            type="button"
+            aria-label="보내기"
+            className={
+              tab === "share" && shareView === "upload" ? "is-active" : ""
+            }
+            onClick={() => showSend()}
+          >
+            <Send aria-hidden="true" size={19} />
+            <span>보내기</span>
+          </button>
+          <button
+            type="button"
+            aria-label="전송 내역"
+            className={
+              tab === "share" && shareView === "history" ? "is-active" : ""
+            }
+            onClick={() => {
+              setTab("share");
+              setShareView("history");
             }}
-          />
-        ) : productMode === "lan-share" ? (
-          <LanShareWorkspace
-            files={lanFiles}
-            onSelectFiles={() => void selectLanFiles()}
-            onRemoveFile={(file) => void removeLanFile(file)}
-          />
-        ) : (
-          <div className="dd-share-screen">
-            <div className="dd-category-toolbar">
-              <div className="dd-category-title">
-                <span className="dd-category-icon">
-                  <Globe2 aria-hidden="true" size={19} />
-                </span>
-                <span>
-                  <strong>{productModes.directdrop.label}</strong>
-                  <small>{productModes.directdrop.description}</small>
-                </span>
-              </div>
-              <nav className="dd-view-nav" aria-label="DirectDrop 보기">
-                <Button
-                  onClick={() => setShareView("upload")}
-                  aria-current={shareView === "upload" ? "page" : undefined}
-                  className={shareView === "upload" ? "is-active" : ""}
-                >
-                  <UploadCloud aria-hidden="true" size={16} /> 파일 업로드
-                </Button>
-                <Button
-                  onClick={() => setShareView("list")}
-                  aria-current={shareView !== "upload" ? "page" : undefined}
-                  className={shareView !== "upload" ? "is-active" : ""}
-                >
-                  <Link2 aria-hidden="true" size={16} /> 공유 목록
-                  {share && <span className="dd-nav-count">1</span>}
-                </Button>
-              </nav>
-            </div>
-            <StateHeader
-              state={visualState}
-              view={shareView}
-              hasActiveShare={Boolean(share)}
+          >
+            <History aria-hidden="true" size={19} />
+            <span>전송 내역</span>
+          </button>
+          <button
+            type="button"
+            aria-label="받은 파일"
+            className={
+              tab === "share" && shareView === "received" ? "is-active" : ""
+            }
+            onClick={() => {
+              setTab("share");
+              setShareView("received");
+            }}
+          >
+            <Inbox aria-hidden="true" size={19} />
+            <span>받은 파일</span>
+          </button>
+          <button
+            type="button"
+            aria-label="연결 대기"
+            className={
+              tab === "share" &&
+              (shareView === "list" || shareView === "detail")
+                ? "is-active"
+                : ""
+            }
+            onClick={() => {
+              setTab("share");
+              setShareView("list");
+            }}
+          >
+            <Radio aria-hidden="true" size={19} />
+            <span>연결 대기</span>
+            {share && <span className="dd-sidebar-count">1</span>}
+          </button>
+          <span className="dd-sidebar-divider" aria-hidden="true" />
+          <button
+            type="button"
+            aria-label="설정"
+            className={tab === "about" ? "is-active" : ""}
+            onClick={() => setTab("about")}
+          >
+            <Settings2 aria-hidden="true" size={19} />
+            <span>설정</span>
+          </button>
+        </nav>
+
+        <div className="dd-device-status">
+          <span className="dd-device-state">
+            <span className={deviceOnline ? "is-online" : ""} />
+            {deviceOnline ? "온라인" : "오프라인"}
+          </span>
+          <strong>
+            <Laptop aria-hidden="true" size={16} />이 기기
+          </strong>
+          <small>{deviceOnline ? "네트워크 연결됨" : "연결 확인 필요"}</small>
+        </div>
+      </aside>
+
+      <div className="dd-shell">
+        <header className="dd-command-bar">
+          <div className="dd-mobile-brand">
+            <BrandMark inverse />
+          </div>
+          <div className="dd-command-title">
+            <strong>
+              {tab === "about"
+                ? "설정"
+                : shareView === "history"
+                  ? "전송 내역"
+                  : shareView === "received"
+                    ? "받은 파일"
+                    : shareView === "list" || shareView === "detail"
+                      ? "공유 목록"
+                      : "보내기"}
+            </strong>
+            <small>DirectDrop 데스크톱</small>
+          </div>
+          <nav className="dd-command-actions" aria-label="빠른 작업">
+            <button type="button" onClick={() => showSend()}>
+              <FolderOpen aria-hidden="true" size={17} />
+              <span>업로드</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setTab("share");
+                setShareView("list");
+              }}
+            >
+              <Link2 aria-hidden="true" size={17} />
+              <span>공유 목록</span>
+            </button>
+            <button type="button" onClick={() => setTab("about")}>
+              <Settings2 aria-hidden="true" size={17} />
+              <span>설정</span>
+            </button>
+          </nav>
+        </header>
+
+        <main className="dd-workspace">
+          {tab === "about" ? (
+            <About
+              autoStart={autoStart}
+              notificationsEnabled={notificationsEnabled}
+              onNotificationsEnabled={setNotificationsEnabled}
+              onAutoStart={async (enabled) => {
+                if (enabled) await enable();
+                else await disable();
+                setAutoStart(enabled);
+              }}
             />
-            {shareView === "upload" && share ? (
-              <NewShareGate
-                share={share}
-                files={files}
-                onNewShare={() => void startNewShare()}
-                onShowShare={() => setShareView("list")}
-              />
-            ) : shareView === "list" && share ? (
-              <ShareList
-                share={share}
-                files={files}
-                online={online}
-                completed={completedDownloads}
-                limit={settings.downloadLimit}
-                onOpen={() => setShareView("detail")}
-              />
-            ) : shareView === "detail" && share ? (
-              <ShareReady
-                share={share}
-                files={files}
-                online={online}
-                completed={completedDownloads}
-                limit={settings.downloadLimit}
-                transfers={transfers}
-                onCopy={() => void copyLink()}
-                onShare={() => void shareLink()}
-                onShowQr={() => setShowQr(true)}
-                onSaveQr={saveQr}
-                onStop={() => void stopShare()}
-                onBack={() => setShareView("list")}
-              />
-            ) : shareView !== "upload" ? (
-              <ShareListEmpty
-                onSelectFiles={() => {
-                  setShareView("upload");
-                  void selectFiles();
+          ) : shareView === "history" ? (
+            <TransferHistory transfers={transfers} />
+          ) : shareView === "received" ? (
+            <ReceivedFiles />
+          ) : shareView === "list" && share ? (
+            <ShareList
+              share={share}
+              files={files}
+              online={online}
+              completed={completedDownloads}
+              limit={settings.downloadLimit}
+              onOpen={() => setShareView("detail")}
+            />
+          ) : shareView === "detail" && share ? (
+            <ShareReady
+              share={share}
+              files={files}
+              online={online}
+              completed={completedDownloads}
+              limit={settings.downloadLimit}
+              transfers={transfers}
+              onCopy={() => void copyLink()}
+              onShare={() => void shareLink()}
+              onShowQr={() => setShowQr(true)}
+              onSaveQr={saveQr}
+              onStop={() => void stopShare()}
+              onBack={() => setShareView("list")}
+            />
+          ) : shareView !== "upload" ? (
+            <ShareListEmpty onSelectFiles={() => showSend("directdrop")} />
+          ) : share ? (
+            <NewShareGate
+              share={share}
+              files={files}
+              onNewShare={() => void startNewShare()}
+              onShowShare={() => setShareView("list")}
+            />
+          ) : (
+            <section className="dd-send-screen" aria-labelledby="send-title">
+              <div className="dd-send-heading">
+                <div>
+                  <h1 id="send-title">파일 보내기</h1>
+                  <p>
+                    가까운 기기로 바로 보내거나 공유 링크를 만들어 전달하세요.
+                  </p>
+                </div>
+                <StatusPill tone="success">
+                  <ShieldCheck aria-hidden="true" size={14} />
+                  종단 간 암호화
+                </StatusPill>
+              </div>
+
+              <TransferModeSelector
+                value={productMode}
+                onChange={(mode) => {
+                  setProductMode(mode);
+                  setSendStage("files");
                 }}
               />
-            ) : (
-              <div className="dd-compose-grid grid gap-5 lg:grid-cols-[1.08fr_.92fr]">
-                <section
-                  aria-labelledby="files-title"
-                  className="dd-files-column"
-                >
-                  <div className="dd-section-heading">
-                    <div>
-                      <p className="dd-kicker">1단계</p>
-                      <h2 id="files-title">파일 선택</h2>
-                    </div>
-                    <span className="dd-local-badge shrink-0">
-                      <CloudOff aria-hidden="true" size={15} /> 서버 저장 없음
-                    </span>
-                  </div>
-                  {!files.length ? (
-                    <button
-                      onClick={() => void selectFiles()}
-                      className="dd-drop-zone flex min-h-[330px] w-full cursor-pointer flex-col items-center justify-center rounded-3xl bg-white p-8 text-center"
-                    >
-                      <span className="dd-drop-icon grid size-14 place-items-center rounded-2xl bg-blue-50 text-blue-700">
-                        <UploadCloud aria-hidden="true" size={27} />
-                      </span>
-                      <strong className="mt-5 text-lg">
-                        보낼 파일을 선택하세요
-                      </strong>
-                      <span className="mt-2 text-sm text-slate-500">
-                        이곳으로 여러 파일을 끌어다 놓아도 됩니다.
-                      </span>
-                      <span className="dd-drop-action mt-6 inline-flex min-h-11 items-center rounded-xl bg-blue-600 px-4 text-sm font-semibold text-white">
-                        <FilePlus2
-                          aria-hidden="true"
-                          className="mr-2"
-                          size={18}
-                        />{" "}
-                        파일 선택
-                      </span>
-                      <span className="mt-4 flex items-center gap-1.5 text-xs font-medium text-slate-500">
-                        <ShieldCheck aria-hidden="true" size={15} /> 파일은
-                        상대방 기기로 직접 전송됩니다.
-                      </span>
-                    </button>
-                  ) : (
-                    <div className="dd-panel dd-selected-files overflow-hidden rounded-2xl bg-white">
-                      <ul className="dd-selected-files-list divide-y divide-slate-200">
-                        {files.map((file) => (
-                          <li
-                            key={file.id}
-                            className="flex min-w-0 items-center gap-3 px-4 py-3"
-                          >
-                            <span className="dd-file-icon grid size-10 shrink-0 place-items-center rounded-xl bg-blue-50 text-blue-700">
-                              <Files aria-hidden="true" size={18} />
-                            </span>
-                            <span className="min-w-0 flex-1">
-                              <span
-                                title={file.name}
-                                className="block truncate text-sm font-semibold"
-                              >
-                                {file.name}
-                              </span>
-                              <span className="tabular mt-0.5 block text-xs text-slate-500">
-                                {formatBytes(file.size)}
-                              </span>
-                            </span>
-                            <button
-                              onClick={() => void removeFile(file)}
-                              className="dd-icon-button grid size-11 cursor-pointer place-items-center rounded-xl text-slate-500 hover:bg-red-50 hover:text-red-700"
-                              aria-label={`${file.name} 제거`}
-                            >
-                              <Trash2 aria-hidden="true" size={17} />
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                      <div className="dd-file-summary flex items-center justify-between border-t border-slate-200 bg-slate-50 px-4 py-3">
-                        <span className="text-sm font-semibold">
-                          파일 {files.length}개
-                        </span>
-                        <span className="tabular text-sm font-bold">
-                          {formatBytes(totalSize)}
-                        </span>
-                      </div>
-                      <Button
-                        onClick={() => void selectFiles()}
-                        className="dd-secondary-button m-3 border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
-                      >
-                        <FilePlus2 aria-hidden="true" size={17} /> 파일 추가
-                      </Button>
-                    </div>
-                  )}
-                </section>
-                <SettingsPanel
+
+              {sendStage === "files" ? (
+                <>
+                  <SendFileStage
+                    files={activeFiles}
+                    totalSize={activeTotalSize}
+                    mode={productMode}
+                    dragging={isDragging}
+                    onSelect={() => void selectActiveFiles()}
+                    onRemove={(file) => void removeActiveFile(file)}
+                    onContinue={() => setSendStage("next")}
+                  />
+                  <RecentTransfers transfers={transfers} />
+                </>
+              ) : productMode === "lan-share" ? (
+                <LanShareWorkspace
+                  files={lanFiles}
+                  onBack={() => setSendStage("files")}
+                />
+              ) : (
+                <ShareLinkSetup
+                  files={files}
+                  totalSize={activeTotalSize}
                   settings={settings}
+                  creating={creating}
+                  onBack={() => setSendStage("files")}
                   onChange={setSettings}
                   onStart={() => void createShare()}
-                  creating={creating}
-                  disabled={!files.length}
                 />
-              </div>
-            )}
-          </div>
+              )}
+            </section>
+          )}
+
+          {activeError && (
+            <div role="alert" className="dd-alert">
+              <AlertTriangle aria-hidden="true" size={18} />
+              <span>{activeError}</span>
+            </div>
+          )}
+        </main>
+
+        {tab === "share" && shareView === "upload" && (
+          <footer className="dd-feature-bar" aria-label="DirectDrop 특징">
+            <span>
+              <ShieldCheck aria-hidden="true" size={18} />
+              <span>
+                <strong>클라우드 불필요</strong>
+                서버 저장 없이 직접 전송
+              </span>
+            </span>
+            <span>
+              <Zap aria-hidden="true" size={18} />
+              <span>
+                <strong>빠른 전송</strong>
+                네트워크에 맞춘 연결
+              </span>
+            </span>
+            <span>
+              <LockKeyhole aria-hidden="true" size={18} />
+              <span>
+                <strong>안전한 전송</strong>
+                암호화로 보호
+              </span>
+            </span>
+          </footer>
         )}
-        {((productMode === "directdrop" && error) ||
-          (productMode === "lan-share" && lanError)) && (
-          <div
-            role="alert"
-            className="dd-alert mt-5 flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-900"
-          >
-            <AlertTriangle
-              aria-hidden="true"
-              className="mt-0.5 shrink-0"
-              size={18}
-            />
-            {productMode === "directdrop" ? error : lanError}
-          </div>
-        )}
-      </main>
+      </div>
 
       {pending && (
         <ApprovalDialog
@@ -867,80 +897,337 @@ export function App() {
   );
 }
 
-function StateHeader({
-  state,
-  view,
-  hasActiveShare,
+function TransferModeSelector({
+  value,
+  onChange,
 }: {
-  state: AppVisualState;
-  view: ShareView;
-  hasActiveShare: boolean;
+  value: ProductMode;
+  onChange: (mode: ProductMode) => void;
 }) {
-  const copy =
-    state === "error"
-      ? visualStateCopy.error
-      : view === "upload" && hasActiveShare
-        ? {
-            label: "새 파일을 공유하세요",
-            description:
-              "현재 링크는 그대로 유지됩니다. 새 파일을 선택할 때만 기존 공유를 종료해요.",
-            step: 0,
-          }
-        : view === "list"
-          ? {
-              label: hasActiveShare
-                ? "공유 중인 항목"
-                : "공유 중인 항목이 없어요",
-              description: hasActiveShare
-                ? "항목을 선택하면 링크, 파일과 전송 현황을 자세히 볼 수 있어요."
-                : "파일을 선택하면 공유 링크와 업로드한 파일이 여기에 표시돼요.",
-              step: hasActiveShare ? 2 : 0,
-            }
-          : visualStateCopy[state];
-  const steps = [
-    { label: "파일 선택", icon: FilePlus2 },
-    { label: "공유 설정", icon: Settings2 },
-    { label: "연결 대기", icon: Radio },
-    { label: "파일 전송", icon: Share2 },
-  ];
+  return (
+    <div className="dd-mode-selector" role="group" aria-label="전송 방식">
+      <button
+        type="button"
+        className={value === "lan-share" ? "is-active" : ""}
+        aria-pressed={value === "lan-share"}
+        onClick={() => onChange("lan-share")}
+      >
+        <span className="dd-mode-icon">
+          <Zap aria-hidden="true" size={21} />
+        </span>
+        <span>
+          <strong>Nearby</strong>
+          <small>같은 네트워크로 빠르게</small>
+        </span>
+      </button>
+      <button
+        type="button"
+        className={value === "directdrop" ? "is-active" : ""}
+        aria-pressed={value === "directdrop"}
+        onClick={() => onChange("directdrop")}
+      >
+        <span className="dd-mode-icon">
+          <Globe2 aria-hidden="true" size={21} />
+        </span>
+        <span>
+          <strong>Share Link</strong>
+          <small>링크로 어디서나 공유</small>
+        </span>
+      </button>
+    </div>
+  );
+}
+
+function SendFileStage({
+  files,
+  totalSize,
+  mode,
+  dragging,
+  onSelect,
+  onRemove,
+  onContinue,
+}: {
+  files: PublicFile[];
+  totalSize: number;
+  mode: ProductMode;
+  dragging: boolean;
+  onSelect: () => void;
+  onRemove: (file: PublicFile) => void;
+  onContinue: () => void;
+}) {
+  if (!files.length) {
+    return (
+      <button
+        type="button"
+        className={`dd-drop-zone ${dragging ? "is-dragging" : ""}`}
+        onClick={onSelect}
+      >
+        <span className="dd-drop-folder">
+          <FolderOpen aria-hidden="true" size={45} strokeWidth={1.6} />
+        </span>
+        <strong>파일을 드래그하거나 선택하세요</strong>
+        <p>여러 파일을 한 번에 선택할 수 있습니다.</p>
+        <span className="dd-drop-cta">
+          <FolderOpen aria-hidden="true" size={17} />
+          파일 선택
+        </span>
+        <small>
+          <LockKeyhole aria-hidden="true" size={14} />
+          전송 데이터는 상대방 기기로 직접 전달됩니다.
+        </small>
+      </button>
+    );
+  }
 
   return (
-    <section className="dd-state-header" aria-live="polite" aria-atomic="true">
-      <div className="dd-state-heading" key={state}>
-        <p className="dd-kicker">DIRECT TRANSFER</p>
-        <h1>{copy.label}</h1>
-        <p>{copy.description}</p>
-      </div>
-      <div className="dd-privacy-note">
-        <ShieldCheck aria-hidden="true" size={18} />
+    <section className="dd-selected-panel" aria-labelledby="selected-title">
+      <header>
+        <div>
+          <h2 id="selected-title">보낼 파일</h2>
+          <p>
+            {mode === "lan-share"
+              ? "계속하면 주변 기기를 검색합니다."
+              : "계속하면 링크 보안과 만료 시간을 설정합니다."}
+          </p>
+        </div>
         <span>
-          <strong>클라우드 저장 없이</strong>
-          기기 사이에서 직접 전송해요
+          {files.length}개 · {formatBytes(totalSize)}
         </span>
-      </div>
-      <ol className="dd-stepper" aria-label="공유 진행 상태">
-        {steps.map((step, index) => {
-          const Icon = step.icon;
-          const current = index === copy.step;
-          return (
-            <li
-              key={step.label}
-              className={current ? "is-current" : ""}
-              data-complete={index < copy.step || undefined}
-              aria-current={current ? "step" : undefined}
+      </header>
+      <ul>
+        {files.map((file) => (
+          <li key={file.id}>
+            <span className="dd-file-icon">
+              <Files aria-hidden="true" size={18} />
+            </span>
+            <span className="dd-file-copy">
+              <strong title={file.name}>{file.name}</strong>
+              <small>{formatBytes(file.size)}</small>
+            </span>
+            <button
+              type="button"
+              className="dd-icon-button"
+              onClick={() => onRemove(file)}
+              aria-label={`${file.name} 제거`}
             >
-              <span className="dd-step-icon">
-                {index < copy.step ? (
-                  <Check aria-hidden="true" size={14} />
-                ) : (
-                  <Icon aria-hidden="true" size={14} />
-                )}
+              <Trash2 aria-hidden="true" size={17} />
+            </button>
+          </li>
+        ))}
+      </ul>
+      <footer>
+        <button
+          type="button"
+          className="dd-secondary-action"
+          onClick={onSelect}
+        >
+          <FilePlus2 aria-hidden="true" size={17} />
+          파일 추가
+        </button>
+        <button
+          type="button"
+          className="dd-primary-action"
+          onClick={onContinue}
+        >
+          계속
+          <ArrowRight aria-hidden="true" size={17} />
+        </button>
+      </footer>
+    </section>
+  );
+}
+
+function transferLabel(state: TransferRow["state"]) {
+  if (state === "COMPLETED") return "저장 완료";
+  if (state === "SENT") return "전송 완료";
+  if (state === "FAILED") return "전송 실패";
+  if (state === "TRANSFERRING") return "전송 중";
+  return "연결 중";
+}
+
+function RecentTransfers({
+  transfers,
+}: {
+  transfers: Record<string, TransferRow>;
+}) {
+  const entries = Object.entries(transfers).slice(-3).reverse();
+
+  return (
+    <section className="dd-recent" aria-labelledby="recent-title">
+      <header>
+        <div>
+          <h2 id="recent-title">최근 전송</h2>
+          <p>현재 앱 실행 중의 실제 전송만 표시합니다.</p>
+        </div>
+        <Clock3 aria-hidden="true" size={18} />
+      </header>
+      {entries.length ? (
+        <ul>
+          {entries.map(([sessionId, transfer]) => (
+            <li key={sessionId}>
+              <span className="dd-file-icon">
+                <Send aria-hidden="true" size={17} />
               </span>
-              <span>{step.label}</span>
+              <span>
+                <strong>{transferLabel(transfer.state)}</strong>
+                <small>연결 {transfer.peerId.slice(0, 8)}</small>
+              </span>
+              <span className="dd-transfer-percent">
+                {transfer.progress
+                  ? `${transfer.progress.percent.toFixed(0)}%`
+                  : transfer.state === "COMPLETED" || transfer.state === "SENT"
+                    ? "100%"
+                    : "—"}
+              </span>
             </li>
-          );
-        })}
-      </ol>
+          ))}
+        </ul>
+      ) : (
+        <div className="dd-empty-row">
+          <History aria-hidden="true" size={20} />
+          <span>
+            <strong>최근 전송이 없습니다.</strong>
+            <small>파일을 보내면 진행 상태가 여기에 표시됩니다.</small>
+          </span>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function TransferHistory({
+  transfers,
+}: {
+  transfers: Record<string, TransferRow>;
+}) {
+  const entries = Object.entries(transfers).reverse();
+
+  return (
+    <section className="dd-library-page" aria-labelledby="history-title">
+      <header>
+        <div>
+          <h1 id="history-title">전송 내역</h1>
+          <p>현재 앱 실행 중 진행한 P2P 전송을 확인합니다.</p>
+        </div>
+        <History aria-hidden="true" size={22} />
+      </header>
+      {entries.length ? (
+        <ul className="dd-library-list">
+          {entries.map(([sessionId, transfer]) => (
+            <li key={sessionId}>
+              <span className="dd-file-icon">
+                <Send aria-hidden="true" size={18} />
+              </span>
+              <span>
+                <strong>{transferLabel(transfer.state)}</strong>
+                <small>피어 {transfer.peerId}</small>
+              </span>
+              <span className="dd-transfer-percent">
+                {transfer.progress
+                  ? `${transfer.progress.percent.toFixed(0)}%`
+                  : transfer.state === "COMPLETED" || transfer.state === "SENT"
+                    ? "100%"
+                    : "—"}
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <div className="dd-library-empty">
+          <History aria-hidden="true" size={30} />
+          <h2>아직 전송 내역이 없습니다.</h2>
+          <p>새 전송을 시작하면 이 화면에서 상태를 확인할 수 있습니다.</p>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function ReceivedFiles() {
+  return (
+    <section className="dd-library-page" aria-labelledby="received-title">
+      <header>
+        <div>
+          <h1 id="received-title">받은 파일</h1>
+          <p>이 기기로 받은 파일을 확인합니다.</p>
+        </div>
+        <Inbox aria-hidden="true" size={22} />
+      </header>
+      <div className="dd-library-empty">
+        <Inbox aria-hidden="true" size={30} />
+        <h2>받은 파일이 없습니다.</h2>
+        <p>수신 기능이 연결되면 실제로 저장된 항목만 이곳에 표시됩니다.</p>
+      </div>
+    </section>
+  );
+}
+
+function ShareLinkSetup({
+  files,
+  totalSize,
+  settings,
+  creating,
+  onBack,
+  onChange,
+  onStart,
+}: {
+  files: PublicFile[];
+  totalSize: number;
+  settings: ShareSettings;
+  creating: boolean;
+  onBack: () => void;
+  onChange: (settings: ShareSettings) => void;
+  onStart: () => void;
+}) {
+  return (
+    <section className="dd-flow-page" aria-labelledby="share-settings-title">
+      <button type="button" className="dd-back-button" onClick={onBack}>
+        <ArrowLeft aria-hidden="true" size={17} />
+        파일 선택으로
+      </button>
+      <div className="dd-flow-heading">
+        <span className="dd-flow-icon">
+          <Globe2 aria-hidden="true" size={22} />
+        </span>
+        <div>
+          <h2 id="share-settings-title">공유 링크 설정</h2>
+          <p>다운로드 횟수와 만료 시간을 정한 뒤 링크를 만드세요.</p>
+        </div>
+      </div>
+      <div className="dd-share-setup-grid">
+        <section className="dd-setup-files" aria-labelledby="setup-files-title">
+          <header>
+            <h3 id="setup-files-title">선택한 파일</h3>
+            <span>
+              {files.length}개 · {formatBytes(totalSize)}
+            </span>
+          </header>
+          <ul>
+            {files.map((file) => (
+              <li key={file.id}>
+                <span className="dd-file-icon">
+                  <Files aria-hidden="true" size={17} />
+                </span>
+                <span>
+                  <strong title={file.name}>{file.name}</strong>
+                  <small>{formatBytes(file.size)}</small>
+                </span>
+              </li>
+            ))}
+          </ul>
+          <div className="dd-setup-note">
+            <ShieldCheck aria-hidden="true" size={17} />
+            파일은 서버에 저장되지 않습니다.
+          </div>
+        </section>
+        <SettingsPanel
+          settings={settings}
+          onChange={onChange}
+          onStart={onStart}
+          creating={creating}
+          disabled={!files.length}
+        />
+      </div>
     </section>
   );
 }
@@ -972,9 +1259,8 @@ function SettingsPanel({
     >
       <div className="dd-settings-heading flex items-center justify-between gap-3">
         <div>
-          <p className="dd-kicker">2단계</p>
           <h2 id="settings-title" className="font-bold">
-            공유 설정
+            링크 옵션
           </h2>
         </div>
         <span className="dd-settings-icon" aria-hidden="true">
@@ -1157,7 +1443,7 @@ function SettingsPanel({
           ) : (
             <Play aria-hidden="true" size={18} />
           )}{" "}
-          공유 시작
+          링크 만들기
         </Button>
       </div>
     </section>

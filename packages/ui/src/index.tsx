@@ -36,19 +36,16 @@ export function BrandMark({
   return (
     <span
       className={cx(
-        "inline-flex items-center gap-2 font-bold tracking-tight",
+        "dd-brand-mark inline-flex items-center gap-2 font-bold tracking-tight",
         inverse ? "text-white" : "text-slate-950",
       )}
     >
-      <span
+      <img
         aria-hidden="true"
-        className={cx(
-          "grid size-8 place-items-center rounded-[10px] text-sm",
-          inverse ? "bg-white text-slate-950" : "bg-blue-600 text-white",
-        )}
-      >
-        D
-      </span>
+        alt=""
+        src="/directdrop-logo-mark.png"
+        className="dd-brand-logo size-8 shrink-0 object-contain"
+      />
       {!compact && <span>DirectDrop</span>}
     </span>
   );
@@ -71,7 +68,7 @@ export function StatusPill({
   return (
     <span
       className={cx(
-        "inline-flex min-h-7 items-center gap-1.5 rounded-full px-2.5 text-xs font-semibold ring-1 ring-inset",
+        "dd-status-pill inline-flex min-h-7 items-center gap-1.5 rounded-full px-2.5 text-xs font-semibold ring-1 ring-inset",
         tones[tone],
         className,
       )}
@@ -92,7 +89,7 @@ export function ProgressBar({
   const safe = Math.min(100, Math.max(0, value));
   return (
     <div
-      className="h-2.5 overflow-hidden rounded-full bg-slate-200"
+      className="dd-progress h-2.5 overflow-hidden rounded-full bg-slate-200"
       role="progressbar"
       aria-label={label}
       aria-valuemin={0}
@@ -100,7 +97,7 @@ export function ProgressBar({
       aria-valuenow={Math.round(safe)}
     >
       <div
-        className="h-full rounded-full bg-blue-600 transition-transform duration-200 motion-reduce:transition-none"
+        className="dd-progress-value h-full rounded-full bg-blue-600 transition-transform duration-200 motion-reduce:transition-none"
         style={{ transform: `translateX(-${100 - safe}%)` }}
       />
     </div>
