@@ -31,7 +31,9 @@ Phase 1은 제품 모드, 화면, 파일 큐, 향후 transport 계약을 분리�
 
 `apps/desktop`의 Rust 레지스트리가 무작위 `publicFileId`를 로컬 절대 경로에 매핑합니다. 브라우저와 서버에는 public ID와 정제된 표시 이름만 전달됩니다. Rust는 매 청크 읽기 전에 크기·mtime을 검사하고 read-only handle로 필요한 범위만 읽습니다.
 
-수신자는 WebRTC DataChannel의 ordered binary chunk를 처리합니다. 총 512 MiB 이하인 일반 공유는 macOS 보호 폴더 권한을 요구하지 않고 메모리 버퍼를 거쳐 브라우저 기본 다운로드 방식으로 저장합니다. 512 MiB를 넘는 대용량 공유는 File System Access API writable stream에 바로 기록하며, 이 API가 없으면 메모리 사용 급증을 막기 위해 다운로드를 차단합니다.
+수신자는 WebRTC DataChannel의 ordered binary chunk를 처리합니다. protocol version 1은 각 binary chunk 전에 file ID, offset, length, SHA-256을 전송합니다. 수신자는 manifest와 정확한 파일 순서·크기·offset·hash를 검증한 뒤 저장하고 누적 저장 바이트를 ACK합니다. 송신자는 수신자가 실제 저장한 데이터와 최대 8 MiB 이상 벌어지면 대기하므로 느린 디스크도 bounded backpressure로 처리합니다.
+
+총 512 MiB 이하인 일반 공유는 macOS 보호 폴더 권한을 요구하지 않고 메모리 버퍼를 거쳐 브라우저 기본 다운로드 방식으로 저장합니다. 512 MiB를 넘는 대용량 공유는 File System Access API writable stream에 바로 기록하며, 이 API가 없으면 메모리 사용 급증을 막기 위해 다운로드를 차단합니다. 같은 이름의 파일이 존재하면 덮어쓰지 않고 번호가 붙은 새 이름을 예약합니다.
 
 ## DownloadSession
 
@@ -40,7 +42,7 @@ RESERVED → CONNECTING → TRANSFERRING → COMPLETED
      └───────────────→ FAILED / CANCELLED
 ```
 
-예약은 SQLite transaction 안에서 `completed + active reservations < downloadLimit`를 검사합니다. 실패, 취소, 연결 종료, timeout은 slot을 반환합니다. 수신자의 저장 완료만 카운트를 정확히 한 번 올립니다.
+예약은 SQLite transaction 안에서 `completed + active reservations < downloadLimit`를 검사합니다. 실패, 취소, 연결 종료, 예약 timeout, 전송 inactivity timeout은 slot을 반환합니다. 송신자의 전송 완료 확인과 수신자의 디스크 저장 완료 확인이 모두 기록된 뒤에만 transaction이 카운트를 정확히 한 번 올립니다.
 
 ## Cleanup
 
