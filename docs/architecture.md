@@ -2,11 +2,28 @@
 
 ```mermaid
 flowchart TB
+  APP["DirectDrop Desktop"] --> DD["DirectDrop · Share Link"]
+  APP --> LAN["LAN Share · Nearby"]
+  DD --> WEBRTC["Internet signaling + WebRTC"]
+  LAN --> NATIVE["Local discovery + encrypted native transport"]
+  NATIVE -. "Phase 2+" .-> DEVICE["Nearby DirectDrop device"]
+```
+
+`DirectDrop`과 `LAN Share`는 UI 상태와 파일 선택 큐가 분리되어 있습니다. 공통 진행 상태와 transport 경계는 `apps/desktop/src/transfer-contract.ts`에 정의합니다. 현재 `WebRTC` Share Link만 실제 전송을 수행하며, LAN discovery·listener·transport는 아직 실행하지 않습니다.
+
+## DirectDrop · Share Link
+
+```mermaid
+flowchart TB
   G["GitHub Repository"] --> A["GitHub Actions"] --> R["GitHub Releases"] --> D["DirectDrop Desktop"]
   D -. "HTTPS and WebSocket signaling" .-> C["share.dlfkd.dev via Cloudflare Tunnel"]
   B["Receiver Browser"] -. "HTTPS and WebSocket signaling" .-> C
   D == "WebRTC RTCDataChannel file bytes" ==> B
 ```
+
+## LAN Share · Nearby
+
+Phase 1은 제품 모드, 화면, 파일 큐, 향후 transport 계약을 분리합니다. Phase 2부터 mDNS/DNS-SD discovery를 Rust backend에 추가하며, 외부 signaling 서버나 `share.dlfkd.dev`에 의존하지 않습니다. 세부 설계와 구현 상태는 [nearby.md](nearby.md)를 참고하세요.
 
 ## 신뢰 경계
 

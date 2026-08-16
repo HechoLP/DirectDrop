@@ -2,6 +2,19 @@
 
 모든 주요 변경 사항은 이 파일에 기록합니다. 버전은 Semantic Versioning을 따릅니다.
 
+## Unreleased
+
+### Added
+
+- `DirectDrop` Share Link와 `LAN Share` Nearby를 분리한 최상위 제품 카테고리
+- 두 카테고리에서 독립적으로 유지되는 파일 선택 큐와 drag-and-drop 동작
+- LAN Share Phase 1 화면과 WebRTC/LAN/Browser LAN 공통 전송 계약
+- Nearby 단계별 아키텍처·보안·백그라운드 정책 문서
+
+### Security
+
+- LAN discovery, listener, 수신 포트는 실제 transport 구현 전까지 비활성 상태 유지
+
 ## 0.1.4 - 2026-08-17
 
 ### Added

@@ -4,7 +4,17 @@
 
 **Direct files. No cloud.**
 
-DirectDrop은 클라우드에 파일을 올리지 않고, 내 컴퓨터에서 상대방에게 직접 파일을 전송하는 P2P 파일 공유 프로그램입니다. 데스크톱 앱이 임시 링크와 QR 코드를 만들고, 수신자는 프로그램 설치 없이 브라우저에서 파일을 저장합니다.
+DirectDrop은 클라우드에 파일을 올리지 않고 기기에서 기기로 직접 전달하는 파일 공유 프로그램입니다. 데스크톱 앱은 인터넷용 `DirectDrop`과 같은 네트워크용 `LAN Share`를 서로 독립된 카테고리로 제공합니다.
+
+## 전송 카테고리
+
+### DirectDrop · Share Link
+
+`share.dlfkd.dev` 임시 링크와 QR 코드를 만들고, 수신자는 프로그램 설치 없이 브라우저에서 파일을 저장합니다. 실제 파일은 WebRTC로 직접 전송합니다.
+
+### LAN Share · Nearby
+
+같은 Wi-Fi 또는 Ethernet의 기기로 인터넷 없이 직접 전송하기 위한 모드입니다. 현재 Phase 1에서 독립 화면·파일 큐·공통 전송 계약까지 분리했으며, mDNS 기기 탐색과 실제 LAN 전송은 다음 Phase에서 구현합니다. 자세한 범위는 [Nearby LAN Share 문서](docs/nearby.md)를 참고하세요.
 
 ## 핵심 기능
 
@@ -41,6 +51,7 @@ Cloudflare Tunnel은 랜딩 페이지, API, WebSocket signaling만 전달합니�
 
 ## 요구 사항과 제한
 
+- 현재 공개 릴리스의 실제 파일 전송 기능은 DirectDrop Share Link입니다. LAN Share는 개발 중입니다.
 - 송신자의 DirectDrop 앱이 온라인이어야 합니다.
 - 기본 구성은 STUN을 사용하는 Direct P2P 전용입니다. 일부 NAT·방화벽 환경에서는 연결이 실패할 수 있습니다.
 - TURN은 선택 사항이며 명시적으로 설정하고 공유에서 Relay를 허용한 경우에만 사용합니다. 서버 업로드 fallback은 없습니다.

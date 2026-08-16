@@ -4,7 +4,17 @@
 
 **Direct files. No cloud.**
 
-DirectDrop is a peer-to-peer file sharing app that sends files directly from your computer to the recipient without uploading them to cloud storage. The desktop app creates a temporary link and QR code, and the recipient saves the files in a browser without installing an app.
+DirectDrop sends files from device to device without uploading them to cloud storage. The desktop app now separates internet sharing under `DirectDrop` from same-network transfers under `LAN Share` so both modes can evolve independently.
+
+## Transfer categories
+
+### DirectDrop · Share Link
+
+Creates a temporary `share.dlfkd.dev` link and QR code. The recipient saves files in a browser without installing an app, while file bytes move directly over WebRTC.
+
+### LAN Share · Nearby
+
+Designed for direct transfers between devices on the same Wi-Fi or Ethernet network without internet access. Phase 1 currently separates the screen, file queue, and shared transport contract. mDNS discovery and actual LAN transfers are planned for the next phases. See the [Nearby LAN Share document](docs/nearby.md) for the exact status.
 
 ## Features
 
@@ -41,6 +51,7 @@ Cloudflare Tunnel carries the landing page, API, and WebSocket signaling only. F
 
 ## Requirements and limitations
 
+- The current public release transfers files through DirectDrop Share Link. LAN Share is still under development.
 - The sender's DirectDrop app must stay online while files are being shared.
 - The default configuration uses STUN for direct P2P connections. Some NAT or firewall environments may prevent a connection.
 - TURN is optional and is used only when it is explicitly configured and relay is enabled for the share. There is no server-upload fallback.
