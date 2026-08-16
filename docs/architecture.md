@@ -31,7 +31,7 @@ Phase 1은 제품 모드, 화면, 파일 큐, 향후 transport 계약을 분리�
 
 `apps/desktop`의 Rust 레지스트리가 무작위 `publicFileId`를 로컬 절대 경로에 매핑합니다. 브라우저와 서버에는 public ID와 정제된 표시 이름만 전달됩니다. Rust는 매 청크 읽기 전에 크기·mtime을 검사하고 read-only handle로 필요한 범위만 읽습니다.
 
-수신자는 WebRTC DataChannel의 ordered binary chunk를 File System Access API writable stream에 바로 기록합니다. 이 API가 없으면 총 512 MiB 이하에서만 메모리 fallback을 허용합니다.
+수신자는 WebRTC DataChannel의 ordered binary chunk를 처리합니다. 총 512 MiB 이하인 일반 공유는 macOS 보호 폴더 권한을 요구하지 않고 메모리 버퍼를 거쳐 브라우저 기본 다운로드 방식으로 저장합니다. 512 MiB를 넘는 대용량 공유는 File System Access API writable stream에 바로 기록하며, 이 API가 없으면 메모리 사용 급증을 막기 위해 다운로드를 차단합니다.
 
 ## DownloadSession
 

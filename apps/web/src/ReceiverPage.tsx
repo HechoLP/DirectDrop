@@ -29,6 +29,7 @@ import { attachReceiverChannel } from "./receiver-transfer";
 import {
   detectSaveCapability,
   prepareSavePlan,
+  savePreparationErrorMessage,
   type SavePlan,
 } from "./save-plan";
 
@@ -314,12 +315,7 @@ export function ReceiverPage({ token }: { token: string }) {
     } catch (saveError) {
       if (saveError instanceof DOMException && saveError.name === "AbortError")
         return;
-      fail(
-        saveError instanceof Error &&
-          saveError.message === "STREAMING_SAVE_UNSUPPORTED"
-          ? "이 브라우저는 이 크기의 파일을 안전하게 저장할 수 없습니다. 최신 Chrome 또는 Edge를 사용해 주세요."
-          : "저장 위치를 준비하지 못했습니다.",
-      );
+      fail(savePreparationErrorMessage(saveError));
     }
   };
 
@@ -485,6 +481,16 @@ export function ReceiverPage({ token }: { token: string }) {
                       size={17}
                     />
                     {capability.warning}
+                  </p>
+                )}
+                {capability?.note && (
+                  <p className="flex items-start gap-2 rounded-xl bg-blue-50 p-3 text-sm leading-6 text-blue-900">
+                    <Download
+                      className="mt-0.5 shrink-0"
+                      aria-hidden="true"
+                      size={17}
+                    />
+                    <span>{capability.note}</span>
                   </p>
                 )}
 
