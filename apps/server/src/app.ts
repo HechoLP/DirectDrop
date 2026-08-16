@@ -205,7 +205,8 @@ export async function buildApp(
   const webRoot = resolve(
     fileURLToPath(new URL("../../web/dist", import.meta.url)),
   );
-  if (existsSync(webRoot)) {
+  const hasWebRoot = existsSync(webRoot);
+  if (hasWebRoot) {
     await app.register(fastifyStatic, {
       root: webRoot,
       wildcard: false,
@@ -220,18 +221,19 @@ export async function buildApp(
         }
       },
     });
-    app.setNotFoundHandler((request, reply) => {
-      if (
-        request.method === "GET" &&
-        request.headers.accept?.includes("text/html")
-      )
-        return reply.sendFile("index.html");
-      return reply
-        .header("cache-control", "no-store")
-        .code(404)
-        .send({ error: "NOT_FOUND" });
-    });
   }
+  app.setNotFoundHandler((request, reply) => {
+    if (
+      hasWebRoot &&
+      request.method === "GET" &&
+      request.headers.accept?.includes("text/html")
+    )
+      return reply.sendFile("index.html");
+    return reply
+      .header("cache-control", "no-store")
+      .code(404)
+      .send({ error: "NOT_FOUND" });
+  });
 
   let cleanupTimer: NodeJS.Timeout | undefined;
   if (config.cleanupMode !== "off") {
