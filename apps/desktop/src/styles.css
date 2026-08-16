@@ -118,6 +118,25 @@ input[type="checkbox"] {
     0 0 0 1px rgba(0, 27, 55, 0.03);
 }
 
+.dd-nav-count {
+  display: grid;
+  min-width: 18px;
+  height: 18px;
+  place-items: center;
+  margin-left: 1px;
+  padding-inline: 5px;
+  border-radius: 999px;
+  color: #1b64da;
+  background: var(--dd-primary-soft);
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.dd-nav-button.is-active .dd-nav-count {
+  color: #fff;
+  background: var(--dd-primary);
+}
+
 .dd-workspace {
   display: flex;
   width: 100%;
@@ -545,6 +564,99 @@ input[type="checkbox"] {
 .dd-switch:focus-visible {
   outline: 3px solid rgba(49, 130, 246, 0.28) !important;
   outline-offset: 2px;
+}
+
+.dd-new-share-gate,
+.dd-share-list-empty {
+  width: 100%;
+  max-width: 680px;
+  align-self: center;
+  margin: auto;
+  padding: 24px;
+  border-radius: var(--dd-radius) !important;
+  text-align: center;
+}
+
+.dd-gate-icon {
+  display: grid;
+  width: 52px;
+  height: 52px;
+  place-items: center;
+  margin: 0 auto;
+  border-radius: 17px;
+  color: var(--dd-primary);
+  background: var(--dd-primary-soft);
+}
+
+.dd-gate-copy {
+  margin-top: 14px;
+}
+
+.dd-gate-copy > span {
+  margin-inline: auto;
+}
+
+.dd-new-share-gate h2,
+.dd-share-list-empty h2 {
+  margin: 10px 0 0;
+  font-size: 20px;
+  font-weight: 740;
+  letter-spacing: -0.03em;
+}
+
+.dd-new-share-gate p,
+.dd-share-list-empty p {
+  max-width: 520px;
+  margin: 7px auto 0;
+  color: var(--dd-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.dd-gate-current {
+  display: flex;
+  min-width: 0;
+  min-height: 60px;
+  align-items: center;
+  gap: 10px;
+  margin-top: 18px;
+  padding: 8px 12px;
+  border: 1px solid #d7e9ff;
+  border-radius: 15px;
+  background: #f7fbff;
+  text-align: left;
+}
+
+.dd-gate-file-count {
+  flex: 0 0 auto;
+  color: var(--dd-muted);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.dd-gate-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.dd-gate-actions > button,
+.dd-share-list-empty > button {
+  min-height: 44px;
+}
+
+.dd-share-list-empty {
+  max-width: 560px;
+}
+
+.dd-share-list-empty > p {
+  max-width: 430px;
+}
+
+.dd-share-list-empty > button {
+  min-width: 190px;
+  margin-top: 18px;
 }
 
 .dd-ready-summary {
@@ -1168,6 +1280,16 @@ input[type="checkbox"] {
     max-height: 72px;
     margin-top: 6px;
   }
+
+  .dd-new-share-gate,
+  .dd-share-list-empty {
+    padding: 18px;
+  }
+
+  .dd-gate-icon {
+    width: 46px;
+    height: 46px;
+  }
 }
 
 @media (max-width: 560px) {
@@ -1242,7 +1364,7 @@ input[type="checkbox"] {
   }
 
   .dd-nav-button {
-    padding-inline: 10px;
+    padding-inline: 9px;
   }
 
   .dd-nav-button svg {
@@ -1271,6 +1393,24 @@ input[type="checkbox"] {
 
   .dd-settings-grid,
   .dd-active-file-list {
+    grid-template-columns: 1fr;
+  }
+
+  .dd-nav-count {
+    margin-left: 0;
+  }
+
+  .dd-gate-current {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .dd-gate-file-count {
+    width: 100%;
+    padding-left: 44px;
+  }
+
+  .dd-gate-actions {
     grid-template-columns: 1fr;
   }
 

@@ -106,6 +106,7 @@ export function App() {
   const [error, setError] = useState<string>();
   const [online, setOnline] = useState(false);
   const [tab, setTab] = useState<"share" | "about">("share");
+  const [shareView, setShareView] = useState<"upload" | "list">("upload");
   const [showQr, setShowQr] = useState(false);
   const [pending, setPending] = useState<PendingRequest>();
   const [transfers, setTransfers] = useState<Record<string, TransferRow>>({});
@@ -127,8 +128,8 @@ export function App() {
   ).length;
   const visualState = resolveVisualState({
     tab,
-    fileCount: files.length,
-    hasShare: Boolean(share),
+    fileCount: shareView === "upload" && !share ? files.length : 0,
+    hasShare: shareView === "list" && Boolean(share),
     online,
     transferStates: Object.values(transfers).map((transfer) => transfer.state),
     hasError: Boolean(error),
@@ -159,6 +160,10 @@ export function App() {
 
   const addPaths = useCallback(async (paths: string[]) => {
     if (!paths.length) return;
+    if (shareRef.current) {
+      setError("현재 공유를 종료한 뒤 새 파일을 선택해 주세요.");
+      return;
+    }
     try {
       const registered = await registerFiles(paths);
       setFiles((current) => {
@@ -199,6 +204,7 @@ export function App() {
     setOnline(false);
     setPending(undefined);
     setShowQr(false);
+    setShareView("upload");
     await Promise.all([
       fetch(`${apiBase}/api/shares/${activeShare.token}`, {
         method: "DELETE",
@@ -255,6 +261,32 @@ export function App() {
     const selected = await open({ multiple: true, directory: false });
     if (selected)
       await addPaths(Array.isArray(selected) ? selected : [selected]);
+  };
+
+  const startNewShare = async () => {
+    if (!shareRef.current) {
+      setTab("share");
+      setShareView("upload");
+      await selectFiles();
+      return;
+    }
+    if (
+      !window.confirm(
+        "새 파일을 공유하면 현재 공유 링크가 종료됩니다. 새 파일을 선택할까요?",
+      )
+    )
+      return;
+    if (!isTauri()) {
+      setError("파일 선택은 DirectDrop 데스크톱 앱에서 사용할 수 있습니다.");
+      return;
+    }
+    const selected = await open({ multiple: true, directory: false });
+    if (!selected) return;
+    const paths = Array.isArray(selected) ? selected : [selected];
+    await stopShare();
+    setTab("share");
+    setShareView("upload");
+    await addPaths(paths);
   };
 
   const removeFile = async (file: PublicFile) => {
@@ -460,6 +492,7 @@ export function App() {
       };
       shareRef.current = next;
       setShare(next);
+      setShareView("list");
       connectShare(next);
     } catch (createError) {
       setError(
@@ -500,11 +533,29 @@ export function App() {
           <BrandMark />
           <nav className="dd-nav flex items-center" aria-label="앱 메뉴">
             <Button
-              onClick={() => setTab("share")}
-              aria-current={tab === "share" ? "page" : undefined}
-              className={`dd-nav-button ${tab === "share" ? "is-active" : ""}`}
+              onClick={() => {
+                setTab("share");
+                setShareView("upload");
+              }}
+              aria-current={
+                tab === "share" && shareView === "upload" ? "page" : undefined
+              }
+              className={`dd-nav-button ${tab === "share" && shareView === "upload" ? "is-active" : ""}`}
             >
-              <Share2 aria-hidden="true" size={17} /> 공유
+              <UploadCloud aria-hidden="true" size={17} /> 업로드
+            </Button>
+            <Button
+              onClick={() => {
+                setTab("share");
+                setShareView("list");
+              }}
+              aria-current={
+                tab === "share" && shareView === "list" ? "page" : undefined
+              }
+              className={`dd-nav-button ${tab === "share" && shareView === "list" ? "is-active" : ""}`}
+            >
+              <Link2 aria-hidden="true" size={17} /> 공유 목록
+              {share && <span className="dd-nav-count">1</span>}
             </Button>
             <Button
               onClick={() => setTab("about")}
@@ -531,8 +582,19 @@ export function App() {
           />
         ) : (
           <div className="dd-share-screen">
-            <StateHeader state={visualState} />
-            {share ? (
+            <StateHeader
+              state={visualState}
+              view={shareView}
+              hasActiveShare={Boolean(share)}
+            />
+            {shareView === "upload" && share ? (
+              <NewShareGate
+                share={share}
+                files={files}
+                onNewShare={() => void startNewShare()}
+                onShowShare={() => setShareView("list")}
+              />
+            ) : shareView === "list" && share ? (
               <ShareReady
                 share={share}
                 files={files}
@@ -545,6 +607,13 @@ export function App() {
                 onShowQr={() => setShowQr(true)}
                 onSaveQr={saveQr}
                 onStop={() => void stopShare()}
+              />
+            ) : shareView === "list" ? (
+              <ShareListEmpty
+                onSelectFiles={() => {
+                  setShareView("upload");
+                  void selectFiles();
+                }}
               />
             ) : (
               <div className="dd-compose-grid grid gap-5 lg:grid-cols-[1.08fr_.92fr]">
@@ -689,8 +758,31 @@ export function App() {
   );
 }
 
-function StateHeader({ state }: { state: AppVisualState }) {
-  const copy = visualStateCopy[state];
+function StateHeader({
+  state,
+  view,
+  hasActiveShare,
+}: {
+  state: AppVisualState;
+  view: "upload" | "list";
+  hasActiveShare: boolean;
+}) {
+  const copy =
+    view === "upload" && hasActiveShare
+      ? {
+          label: "새 파일을 공유하세요",
+          description:
+            "현재 링크는 그대로 유지됩니다. 새 파일을 선택할 때만 기존 공유를 종료해요.",
+          step: 0,
+        }
+      : view === "list" && !hasActiveShare
+        ? {
+            label: "공유 중인 항목이 없어요",
+            description:
+              "파일을 선택하면 공유 링크와 업로드한 파일이 여기에 표시돼요.",
+            step: 0,
+          }
+        : visualStateCopy[state];
   const steps = [
     { label: "파일 선택", icon: FilePlus2 },
     { label: "공유 설정", icon: Settings2 },
@@ -958,6 +1050,94 @@ function SettingsPanel({
   );
 }
 
+function NewShareGate({
+  share,
+  files,
+  onNewShare,
+  onShowShare,
+}: {
+  share: CreatedShare;
+  files: PublicFile[];
+  onNewShare: () => void;
+  onShowShare: () => void;
+}) {
+  const totalSize = useMemo(
+    () => files.reduce((sum, file) => sum + file.size, 0),
+    [files],
+  );
+
+  return (
+    <section
+      className="dd-panel dd-new-share-gate"
+      aria-labelledby="new-share-title"
+    >
+      <span className="dd-gate-icon" aria-hidden="true">
+        <FilePlus2 size={25} />
+      </span>
+      <div className="dd-gate-copy">
+        <StatusPill tone="success">
+          <Radio aria-hidden="true" size={13} /> 현재 공유 유지 중
+        </StatusPill>
+        <h2 id="new-share-title">다른 파일을 보내시겠어요?</h2>
+        <p>
+          새 파일을 선택하기 전까지 지금 링크는 계속 작동합니다. 새 공유를
+          시작하면 현재 링크가 종료돼요.
+        </p>
+      </div>
+      <div className="dd-gate-current" aria-label="현재 공유 요약">
+        <span className="dd-list-icon" aria-hidden="true">
+          <Link2 size={17} />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="dd-list-label">현재 공유 링크</span>
+          <strong className="block truncate text-sm">{share.url}</strong>
+        </span>
+        <span className="dd-gate-file-count tabular">
+          파일 {files.length}개 · {formatBytes(totalSize)}
+        </span>
+      </div>
+      <div className="dd-gate-actions">
+        <Button
+          onClick={onNewShare}
+          className="dd-primary-button bg-blue-600 text-white hover:bg-blue-700"
+        >
+          <FilePlus2 aria-hidden="true" size={18} /> 새 파일 선택
+        </Button>
+        <Button
+          onClick={onShowShare}
+          className="border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
+        >
+          <Link2 aria-hidden="true" size={18} /> 공유 목록 보기
+        </Button>
+      </div>
+    </section>
+  );
+}
+
+function ShareListEmpty({ onSelectFiles }: { onSelectFiles: () => void }) {
+  return (
+    <section
+      className="dd-panel dd-share-list-empty"
+      aria-labelledby="share-list-empty-title"
+    >
+      <span className="dd-gate-icon" aria-hidden="true">
+        <Link2 size={25} />
+      </span>
+      <h2 id="share-list-empty-title">아직 활성화된 링크가 없어요</h2>
+      <p>
+        파일을 선택하고 공유를 시작하면 업로드한 파일과 링크를 한곳에서 볼 수
+        있습니다.
+      </p>
+      <Button
+        onClick={onSelectFiles}
+        className="dd-primary-button bg-blue-600 text-white hover:bg-blue-700"
+      >
+        <UploadCloud aria-hidden="true" size={18} /> 파일 선택
+      </Button>
+    </section>
+  );
+}
+
 function ShareReady({
   share,
   files,
@@ -1052,7 +1232,7 @@ function ShareReady({
 
           <div className="dd-active-file-region">
             <div className="dd-active-file-title">
-              <span>공유 파일</span>
+              <span>업로드한 파일</span>
               <span className="tabular">{formatBytes(totalSize)}</span>
             </div>
             <ul className="dd-active-file-list">
@@ -1209,7 +1389,7 @@ function About({
         <h1 className="dd-about-title mt-6 text-2xl font-bold">
           DirectDrop 정보
         </h1>
-        <p className="mt-1 text-sm text-slate-500">Version 0.1.3</p>
+        <p className="mt-1 text-sm text-slate-500">Version 0.1.4</p>
         <p className="dd-about-description mt-5 text-sm leading-6 text-slate-600">
           파일을 서버에 저장하지 않고 WebRTC P2P로 상대방 기기에 직접
           전송합니다.
