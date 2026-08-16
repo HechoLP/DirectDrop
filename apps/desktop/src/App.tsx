@@ -10,8 +10,10 @@ import {
 } from "@tauri-apps/plugin-notification";
 import {
   AlertTriangle,
+  ArrowLeft,
   Bell,
   Check,
+  ChevronRight,
   CloudOff,
   Copy,
   Download,
@@ -88,6 +90,7 @@ type TransferRow = {
   peerId: string;
 };
 type PendingRequest = { sessionId: string; peerId: string };
+type ShareView = "upload" | "list" | "detail";
 
 async function notify(title: string, body: string) {
   let granted = await isPermissionGranted();
@@ -112,7 +115,7 @@ export function App() {
   const [online, setOnline] = useState(false);
   const [productMode, setProductMode] = useState<ProductMode>("directdrop");
   const [tab, setTab] = useState<"share" | "about">("share");
-  const [shareView, setShareView] = useState<"upload" | "list">("upload");
+  const [shareView, setShareView] = useState<ShareView>("upload");
   const [showQr, setShowQr] = useState(false);
   const [pending, setPending] = useState<PendingRequest>();
   const [transfers, setTransfers] = useState<Record<string, TransferRow>>({});
@@ -139,7 +142,7 @@ export function App() {
       ? resolveVisualState({
           tab,
           fileCount: shareView === "upload" && !share ? files.length : 0,
-          hasShare: shareView === "list" && Boolean(share),
+          hasShare: shareView !== "upload" && Boolean(share),
           online,
           transferStates: Object.values(transfers).map(
             (transfer) => transfer.state,
@@ -163,6 +166,11 @@ export function App() {
   useEffect(() => {
     notificationsRef.current = notificationsEnabled;
   }, [notificationsEnabled]);
+
+  useEffect(() => {
+    if (tab === "share" && window.scrollY > 0)
+      window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  }, [productMode, shareView, tab]);
 
   const notifyIfEnabled = useCallback((title: string, body: string) => {
     if (notificationsRef.current) void notify(title, body);
@@ -664,8 +672,8 @@ export function App() {
                 </Button>
                 <Button
                   onClick={() => setShareView("list")}
-                  aria-current={shareView === "list" ? "page" : undefined}
-                  className={shareView === "list" ? "is-active" : ""}
+                  aria-current={shareView !== "upload" ? "page" : undefined}
+                  className={shareView !== "upload" ? "is-active" : ""}
                 >
                   <Link2 aria-hidden="true" size={16} /> 공유 목록
                   {share && <span className="dd-nav-count">1</span>}
@@ -685,6 +693,15 @@ export function App() {
                 onShowShare={() => setShareView("list")}
               />
             ) : shareView === "list" && share ? (
+              <ShareList
+                share={share}
+                files={files}
+                online={online}
+                completed={completedDownloads}
+                limit={settings.downloadLimit}
+                onOpen={() => setShareView("detail")}
+              />
+            ) : shareView === "detail" && share ? (
               <ShareReady
                 share={share}
                 files={files}
@@ -697,8 +714,9 @@ export function App() {
                 onShowQr={() => setShowQr(true)}
                 onSaveQr={saveQr}
                 onStop={() => void stopShare()}
+                onBack={() => setShareView("list")}
               />
-            ) : shareView === "list" ? (
+            ) : shareView !== "upload" ? (
               <ShareListEmpty
                 onSelectFiles={() => {
                   setShareView("upload");
@@ -855,25 +873,30 @@ function StateHeader({
   hasActiveShare,
 }: {
   state: AppVisualState;
-  view: "upload" | "list";
+  view: ShareView;
   hasActiveShare: boolean;
 }) {
   const copy =
-    view === "upload" && hasActiveShare
-      ? {
-          label: "새 파일을 공유하세요",
-          description:
-            "현재 링크는 그대로 유지됩니다. 새 파일을 선택할 때만 기존 공유를 종료해요.",
-          step: 0,
-        }
-      : view === "list" && !hasActiveShare
+    state === "error"
+      ? visualStateCopy.error
+      : view === "upload" && hasActiveShare
         ? {
-            label: "공유 중인 항목이 없어요",
+            label: "새 파일을 공유하세요",
             description:
-              "파일을 선택하면 공유 링크와 업로드한 파일이 여기에 표시돼요.",
+              "현재 링크는 그대로 유지됩니다. 새 파일을 선택할 때만 기존 공유를 종료해요.",
             step: 0,
           }
-        : visualStateCopy[state];
+        : view === "list"
+          ? {
+              label: hasActiveShare
+                ? "공유 중인 항목"
+                : "공유 중인 항목이 없어요",
+              description: hasActiveShare
+                ? "항목을 선택하면 링크, 파일과 전송 현황을 자세히 볼 수 있어요."
+                : "파일을 선택하면 공유 링크와 업로드한 파일이 여기에 표시돼요.",
+              step: hasActiveShare ? 2 : 0,
+            }
+          : visualStateCopy[state];
   const steps = [
     { label: "파일 선택", icon: FilePlus2 },
     { label: "공유 설정", icon: Settings2 },
@@ -1229,6 +1252,72 @@ function ShareListEmpty({ onSelectFiles }: { onSelectFiles: () => void }) {
   );
 }
 
+function ShareList({
+  share,
+  files,
+  online,
+  completed,
+  limit,
+  onOpen,
+}: {
+  share: CreatedShare;
+  files: PublicFile[];
+  online: boolean;
+  completed: number;
+  limit: number | null;
+  onOpen: () => void;
+}) {
+  const totalSize = useMemo(
+    () => files.reduce((sum, file) => sum + file.size, 0),
+    [files],
+  );
+  const fileSummary = files.length
+    ? `${files[0]!.name}${files.length > 1 ? ` 외 ${files.length - 1}개` : ""}`
+    : "파일 없음";
+
+  return (
+    <section className="dd-share-list" aria-labelledby="share-list-title">
+      <div className="dd-share-list-heading">
+        <div>
+          <p className="dd-kicker">ACTIVE SHARE</p>
+          <h2 id="share-list-title">활성 공유 1개</h2>
+        </div>
+        <span>선택해서 상세 보기</span>
+      </div>
+      <button
+        type="button"
+        className="dd-share-list-row"
+        onClick={onOpen}
+        aria-label={`${fileSummary} 공유 상세 보기`}
+      >
+        <span className="dd-list-icon" aria-hidden="true">
+          <Link2 size={18} />
+        </span>
+        <span className="dd-share-list-main">
+          <span className="dd-share-list-status">
+            <span className={online ? "is-online" : ""} aria-hidden="true" />
+            {online ? "공유 중" : "연결 중"}
+          </span>
+          <strong title={fileSummary}>{fileSummary}</strong>
+          <small title={share.url}>{share.url}</small>
+        </span>
+        <span className="dd-share-list-meta">
+          <strong>
+            파일 {files.length}개 · {formatBytes(totalSize)}
+          </strong>
+          <small className="tabular">
+            {completed} / {limit ?? "∞"}회 · 남은 시간{" "}
+            <ShareRemaining expiresAt={share.expiresAt} />
+          </small>
+        </span>
+        <span className="dd-share-list-chevron" aria-hidden="true">
+          <ChevronRight size={20} />
+        </span>
+      </button>
+    </section>
+  );
+}
+
 function ShareReady({
   share,
   files,
@@ -1241,6 +1330,7 @@ function ShareReady({
   onShowQr,
   onSaveQr,
   onStop,
+  onBack,
 }: {
   share: CreatedShare;
   files: PublicFile[];
@@ -1253,6 +1343,7 @@ function ShareReady({
   onShowQr: () => void;
   onSaveQr: () => void;
   onStop: () => void;
+  onBack: () => void;
 }) {
   const totalSize = useMemo(
     () => files.reduce((sum, file) => sum + file.size, 0),
@@ -1263,6 +1354,9 @@ function ShareReady({
   return (
     <div className="dd-share-ready mx-auto max-w-4xl">
       <div className="dd-ready-summary flex items-center justify-between gap-4">
+        <button type="button" onClick={onBack} className="dd-detail-back">
+          <ArrowLeft aria-hidden="true" size={17} /> 공유 목록
+        </button>
         <div className="min-w-0">
           <StatusPill tone={online ? "success" : "warning"}>
             <Radio aria-hidden="true" size={13} />
