@@ -1,6 +1,6 @@
 {
   "name": "directdrop",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "description": "Direct P2P file sharing with no cloud file storage.",
   "license": "MIT",

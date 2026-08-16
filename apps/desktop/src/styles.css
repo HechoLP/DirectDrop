@@ -3,20 +3,27 @@
 
 :root {
   font-family:
-    Inter, "Noto Sans KR", "Apple SD Gothic Neo", Pretendard, system-ui,
+    -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display",
+    Pretendard, "Apple SD Gothic Neo", "Noto Sans KR", Inter, system-ui,
     sans-serif;
-  color: #18151d;
-  background: #0d0a10;
+  color: #191f28;
+  background: #f2f4f6;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
-  --dd-ink: #18151d;
-  --dd-muted: #67616d;
-  --dd-surface: rgba(255, 255, 255, 0.84);
-  --dd-surface-strong: rgba(255, 255, 255, 0.94);
-  --dd-border: rgba(255, 255, 255, 0.58);
-  --dd-dark: #17131c;
-  --dd-focus: #6b49a8;
-  --dd-shadow: 0 24px 70px rgba(29, 18, 38, 0.2);
+  --dd-primary: #3182f6;
+  --dd-primary-hover: #1b64da;
+  --dd-primary-soft: #edf6ff;
+  --dd-ink: #191f28;
+  --dd-secondary: #4e5968;
+  --dd-muted: #8b95a1;
+  --dd-background: #f2f4f6;
+  --dd-surface: #ffffff;
+  --dd-surface-muted: #f7f8fa;
+  --dd-border: #e5e8eb;
+  --dd-danger: #e42939;
+  --dd-success: #00a878;
+  --dd-radius: 22px;
+  --dd-shadow: 0 1px 2px rgba(0, 27, 55, 0.04);
 }
 
 * {
@@ -26,7 +33,7 @@
 html,
 body,
 #root {
-  min-width: 600px;
+  min-width: 320px;
   min-height: 100%;
   margin: 0;
 }
@@ -34,7 +41,7 @@ body,
 body {
   min-height: 100dvh;
   overflow-x: hidden;
-  background: #0d0a10;
+  background: var(--dd-background);
 }
 
 button,
@@ -56,321 +63,463 @@ input[type="checkbox"] {
 }
 
 .dd-app {
-  --dd-canvas-from: #f4bee5;
-  --dd-canvas-mid: #ffe5c6;
-  --dd-canvas-to: #a68edb;
-  position: relative;
-  z-index: 0;
   min-height: 100dvh;
-  overflow: hidden;
   color: var(--dd-ink);
-  background: linear-gradient(
-    135deg,
-    var(--dd-canvas-from),
-    var(--dd-canvas-mid) 54%,
-    var(--dd-canvas-to)
-  );
-  isolation: isolate;
-}
-
-.dd-state-ready {
-  --dd-canvas-from: #fcd3b2;
-  --dd-canvas-mid: #fff2d5;
-  --dd-canvas-to: #bba4e0;
-}
-
-.dd-state-connect {
-  --dd-canvas-from: #a4d0f2;
-  --dd-canvas-mid: #e0f4ff;
-  --dd-canvas-to: #a788da;
-}
-
-.dd-state-live {
-  --dd-canvas-from: #c4b4ec;
-  --dd-canvas-mid: #e2fff4;
-  --dd-canvas-to: #79b4cf;
-}
-
-.dd-state-transfer {
-  --dd-canvas-from: #fbdda4;
-  --dd-canvas-mid: #fff0d6;
-  --dd-canvas-to: #c99bc4;
-}
-
-.dd-state-complete {
-  --dd-canvas-from: #9ee1c8;
-  --dd-canvas-mid: #e9ffef;
-  --dd-canvas-to: #83bce1;
-}
-
-.dd-state-error {
-  --dd-canvas-from: #f4a4a6;
-  --dd-canvas-mid: #ffdeca;
-  --dd-canvas-to: #be82bc;
-}
-
-.dd-state-about {
-  --dd-canvas-from: #afc4ef;
-  --dd-canvas-mid: #ede7ff;
-  --dd-canvas-to: #bb9be0;
-}
-
-.dd-app::before {
-  position: fixed;
-  z-index: 1;
-  inset: 0;
-  background:
-    radial-gradient(
-        circle at center,
-        rgba(255, 255, 255, 0.43) 0 1.15px,
-        transparent 1.45px
-      )
-      0 0 / 10px 10px,
-    linear-gradient(180deg, rgba(10, 7, 12, 0.42), transparent 22%),
-    linear-gradient(0deg, rgba(31, 21, 38, 0.14), transparent 46%);
-  content: "";
-  pointer-events: none;
-}
-
-.dd-ambient {
-  position: fixed;
-  z-index: 0;
-  inset: 0;
-  display: block;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
+  background: var(--dd-background);
 }
 
 .dd-topbar {
-  position: relative;
+  position: sticky;
   z-index: 30;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.16);
-  background: rgba(13, 10, 16, 0.48);
-  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.06);
-  backdrop-filter: blur(22px) saturate(125%);
+  top: 0;
+  border-bottom: 1px solid rgba(0, 27, 55, 0.08);
+  background: rgba(255, 255, 255, 0.92);
+  -webkit-backdrop-filter: saturate(130%) blur(18px);
+  backdrop-filter: saturate(130%) blur(18px);
+}
+
+.dd-topbar-inner {
+  min-height: 64px;
+}
+
+.dd-nav {
+  gap: 2px;
+  padding: 3px;
+  border-radius: 12px;
+  background: #f2f4f6;
 }
 
 .dd-nav-button {
-  min-height: 38px;
-  border: 1px solid transparent;
-  border-radius: 11px;
-  color: rgba(255, 255, 255, 0.72);
+  min-height: 36px;
+  padding: 0 13px;
+  border: 0;
+  border-radius: 9px;
+  color: #6b7684;
   background: transparent;
+  box-shadow: none;
 }
 
 .dd-nav-button:hover {
-  color: #fff;
-  background: rgba(255, 255, 255, 0.1);
+  color: var(--dd-ink);
+  background: rgba(255, 255, 255, 0.7);
 }
 
 .dd-nav-button.is-active {
-  color: var(--dd-dark);
+  color: var(--dd-ink);
   background: #fff;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.14);
-}
-
-.dd-stage {
-  position: relative;
-  z-index: 2;
-  display: flex;
-  min-height: clamp(260px, 39vh, 350px);
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 28px 24px 56px;
-  color: #fff;
-  text-align: center;
-}
-
-.dd-stage-kicker {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0 0 10px;
-  color: rgba(255, 255, 255, 0.78);
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.18em;
-}
-
-.dd-stage-kicker span {
-  width: 6px;
-  height: 6px;
-  border-radius: 999px;
-  background: currentColor;
-  box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.12);
-}
-
-.dd-stage-copy {
-  animation: dd-state-enter 360ms cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-
-.dd-stage-title {
-  margin: 0;
-  color: #fff;
-  font-size: clamp(4.2rem, 11vw, 7.4rem);
-  font-weight: 800;
-  letter-spacing: -0.075em;
-  line-height: 0.9;
-  text-shadow: 0 4px 30px rgba(53, 32, 59, 0.17);
-}
-
-.dd-stage-copy p {
-  margin: 15px 0 0;
-  color: rgba(255, 255, 255, 0.9);
-  font-size: 14px;
-  font-weight: 650;
-  letter-spacing: -0.01em;
-  text-shadow: 0 2px 16px rgba(44, 27, 48, 0.22);
-}
-
-.dd-state-rail {
-  position: absolute;
-  bottom: 20px;
-  display: flex;
-  align-items: center;
-  gap: 3px;
-  max-width: calc(100% - 32px);
-  margin: 0;
-  padding: 4px;
-  overflow-x: auto;
-  border: 1px solid rgba(255, 255, 255, 0.23);
-  border-radius: 14px;
-  background: rgba(45, 32, 52, 0.16);
   box-shadow:
-    0 12px 34px rgba(42, 25, 51, 0.14),
-    inset 0 1px 0 rgba(255, 255, 255, 0.15);
-  backdrop-filter: blur(18px) saturate(120%);
-  list-style: none;
-  scrollbar-width: none;
-}
-
-.dd-state-rail::-webkit-scrollbar {
-  display: none;
-}
-
-.dd-state-rail li {
-  display: inline-flex;
-  min-height: 31px;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 0 11px;
-  border-radius: 10px;
-  color: rgba(255, 255, 255, 0.63);
-  font-size: 12px;
-  font-weight: 650;
-  white-space: nowrap;
-  transition:
-    color 180ms ease,
-    background-color 180ms ease,
-    transform 180ms ease;
-}
-
-.dd-state-rail li[data-complete="true"] {
-  color: rgba(255, 255, 255, 0.88);
-}
-
-.dd-state-rail li.is-current {
-  color: #17131c;
-  background: rgba(255, 255, 255, 0.94);
-  box-shadow: 0 4px 14px rgba(38, 24, 47, 0.14);
-  transform: translateY(-1px);
+    0 1px 2px rgba(0, 27, 55, 0.08),
+    0 0 0 1px rgba(0, 27, 55, 0.03);
 }
 
 .dd-workspace {
-  position: relative;
-  z-index: 2;
+  padding-top: 0;
 }
 
-.dd-workspace-heading,
-.dd-panel,
-.dd-drop-zone,
-.dd-dialog {
-  border: 1px solid var(--dd-border) !important;
-  background: var(--dd-surface) !important;
-  box-shadow: var(--dd-shadow);
-  backdrop-filter: blur(28px) saturate(120%);
+.dd-state-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 24px;
+  padding: 52px 0 30px;
 }
 
-.dd-workspace-heading {
-  padding: 18px 20px;
-  border-radius: 22px;
+.dd-state-heading {
+  min-width: 0;
+  animation: dd-content-in 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 .dd-kicker {
+  margin: 0 0 7px;
+  color: var(--dd-primary);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.dd-state-heading h1 {
   margin: 0;
-  color: #74657e;
-  font-size: 10px;
-  font-weight: 850;
-  letter-spacing: 0.14em;
+  color: var(--dd-ink);
+  font-size: clamp(1.9rem, 4vw, 2.55rem);
+  font-weight: 730;
+  letter-spacing: -0.045em;
+  line-height: 1.2;
+}
+
+.dd-state-heading > p:last-child {
+  max-width: 620px;
+  margin: 12px 0 0;
+  color: var(--dd-secondary);
+  font-size: 15px;
+  line-height: 1.65;
+}
+
+.dd-privacy-note {
+  display: flex;
+  min-width: 220px;
+  align-items: center;
+  gap: 11px;
+  padding: 13px 15px;
+  border-radius: 16px;
+  color: #22725a;
+  background: #eafaf4;
+}
+
+.dd-privacy-note > svg {
+  flex: 0 0 auto;
+}
+
+.dd-privacy-note span {
+  display: grid;
+  gap: 2px;
+  color: #397867;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.dd-privacy-note strong {
+  color: #146c51;
+  font-size: 12px;
+}
+
+.dd-stepper {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px;
+  margin: 8px 0 0;
+  padding: 5px;
+  border: 1px solid var(--dd-border);
+  border-radius: 18px;
+  background: var(--dd-surface);
+  box-shadow: var(--dd-shadow);
+  list-style: none;
+}
+
+.dd-stepper li {
+  display: flex;
+  min-width: 0;
+  min-height: 46px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 10px;
+  border-radius: 13px;
+  color: var(--dd-muted);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  transition:
+    color 180ms ease,
+    background-color 180ms ease;
+}
+
+.dd-step-icon {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 9px;
+  color: #8b95a1;
+  background: #f2f4f6;
+}
+
+.dd-stepper li[data-complete="true"] {
+  color: #4e5968;
+}
+
+.dd-stepper li[data-complete="true"] .dd-step-icon {
+  color: var(--dd-primary);
+  background: var(--dd-primary-soft);
+}
+
+.dd-stepper li.is-current {
+  color: #1b64da;
+  background: var(--dd-primary-soft);
+}
+
+.dd-stepper li.is-current .dd-step-icon {
+  color: #fff;
+  background: var(--dd-primary);
+}
+
+.dd-compose-grid {
+  align-items: start;
+  padding-top: 4px;
+}
+
+.dd-section-heading {
+  display: flex;
+  min-height: 54px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 10px;
+  padding: 0 2px;
+}
+
+.dd-section-heading .dd-kicker {
+  margin-bottom: 3px;
+  color: var(--dd-muted);
+}
+
+.dd-section-heading h2 {
+  margin: 0;
+  color: var(--dd-ink);
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.025em;
 }
 
 .dd-local-badge {
   display: inline-flex;
-  min-height: 30px;
+  min-height: 32px;
   align-items: center;
   gap: 6px;
-  padding: 0 10px;
-  border: 1px solid rgba(35, 28, 40, 0.1);
+  padding: 0 11px;
   border-radius: 999px;
-  color: #4a424f;
-  background: rgba(255, 255, 255, 0.62);
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
+  color: #397867;
+  background: #eafaf4;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.dd-panel,
+.dd-drop-zone,
+.dd-ready-summary,
+.dd-share-ready .rounded-2xl,
+.dd-share-ready .rounded-xl,
+.dd-about > .dd-panel,
+.dd-dialog {
+  border: 1px solid var(--dd-border) !important;
+  background: var(--dd-surface) !important;
+  box-shadow: var(--dd-shadow);
+}
+
+.dd-panel,
+.dd-drop-zone {
+  border-radius: var(--dd-radius) !important;
 }
 
 .dd-drop-zone {
   position: relative;
-  overflow: hidden;
-  border-style: solid !important;
-}
-
-.dd-drop-zone::before {
-  position: absolute;
-  inset: 12px;
-  border: 1px dashed rgba(50, 38, 57, 0.2);
-  border-radius: 20px;
-  content: "";
-  pointer-events: none;
+  border-color: transparent !important;
+  outline: 1px solid rgba(0, 27, 55, 0.035);
+  outline-offset: -1px;
 }
 
 .dd-drop-zone:hover {
-  border-color: rgba(56, 40, 66, 0.3) !important;
-  background: rgba(255, 255, 255, 0.93) !important;
-  transform: translateY(-2px);
+  border-color: #c9e2ff !important;
+  background: #fbfdff !important;
 }
 
-.dd-drop-zone > * {
-  position: relative;
-  z-index: 1;
+.dd-drop-icon,
+.dd-file-icon {
+  color: var(--dd-primary) !important;
+  background: var(--dd-primary-soft) !important;
+}
+
+.dd-drop-action,
+.dd-primary-button {
+  color: #fff !important;
+  background: var(--dd-primary) !important;
+  box-shadow: none !important;
+}
+
+.dd-drop-zone:hover .dd-drop-action,
+.dd-primary-button:hover {
+  background: var(--dd-primary-hover) !important;
+}
+
+.dd-file-summary {
+  color: var(--dd-secondary);
+  background: var(--dd-surface-muted) !important;
+}
+
+.dd-icon-button:hover {
+  color: var(--dd-danger) !important;
+  background: #fff0f1 !important;
+}
+
+.dd-secondary-button {
+  color: var(--dd-secondary) !important;
+  background: #fff !important;
+}
+
+.dd-secondary-button:hover {
+  background: var(--dd-surface-muted) !important;
 }
 
 .dd-settings-panel {
   align-self: start;
+  padding: 23px !important;
+}
+
+.dd-settings-heading {
+  min-height: 54px;
+  margin-bottom: 10px;
+}
+
+.dd-settings-heading .dd-kicker {
+  margin-bottom: 3px;
+  color: var(--dd-muted);
+}
+
+.dd-settings-icon {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border-radius: 12px;
+  color: var(--dd-primary);
+  background: var(--dd-primary-soft);
+}
+
+.dd-settings-panel h2 {
+  color: var(--dd-ink);
+  font-size: 18px;
+  letter-spacing: -0.025em;
+}
+
+.dd-preset {
+  color: var(--dd-secondary);
+  background: #fff;
+}
+
+.dd-preset:hover {
+  border-color: #90c2ff !important;
+  background: #f7fbff !important;
+}
+
+.dd-preset[aria-pressed="true"] {
+  border-color: #90c2ff !important;
+  color: #1b64da;
+  background: var(--dd-primary-soft) !important;
+  box-shadow: inset 0 0 0 1px rgba(49, 130, 246, 0.08);
+}
+
+.dd-setting-toggle {
+  color: var(--dd-secondary);
+  background: var(--dd-surface-muted) !important;
+}
+
+.dd-switch {
+  position: relative;
+  width: 42px;
+  height: 25px;
+  margin: 0;
+  appearance: none;
+  border: 0;
+  border-radius: 999px;
+  outline: none;
+  background: #d8dde3;
+  cursor: pointer;
+}
+
+.dd-switch::after {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 19px;
+  height: 19px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 27, 55, 0.2);
+  content: "";
+  transition: transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.dd-switch:checked {
+  background: var(--dd-primary);
+}
+
+.dd-switch:checked::after {
+  transform: translateX(17px);
+}
+
+.dd-switch:focus-visible {
+  outline: 3px solid rgba(49, 130, 246, 0.28) !important;
+  outline-offset: 2px;
+}
+
+.dd-ready-summary {
+  padding: 20px 22px;
+  border-radius: var(--dd-radius);
+}
+
+.dd-share-ready {
+  padding-bottom: 6px;
+}
+
+.dd-share-ready .space-y-5 > div,
+.dd-share-ready aside {
+  border-radius: 18px !important;
+}
+
+.dd-field-label {
+  color: var(--dd-muted) !important;
+}
+
+.dd-share-url {
+  color: #1b64da !important;
+}
+
+.dd-about {
+  padding-top: 48px;
+}
+
+.dd-about > .dd-panel {
+  border-radius: var(--dd-radius) !important;
+}
+
+.dd-about a {
+  color: var(--dd-secondary);
+}
+
+.dd-about a:hover {
+  color: var(--dd-ink);
+  background: var(--dd-surface-muted);
+}
+
+.dd-alert {
+  border-color: #ffd5d8 !important;
+  color: #b42331 !important;
+  background: #fff2f3 !important;
+  box-shadow: none;
+}
+
+.dd-dialog-backdrop {
+  background: rgba(15, 23, 32, 0.42) !important;
+  -webkit-backdrop-filter: blur(5px);
+  backdrop-filter: blur(5px);
+  animation: dd-backdrop-in 160ms ease-out both;
+}
+
+.dd-dialog {
+  border-radius: 24px !important;
+  animation: dd-dialog-in 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 .dd-app .bg-white {
-  background-color: rgba(255, 255, 255, 0.84);
+  background-color: #fff;
 }
 
 .dd-app .bg-slate-50 {
-  background-color: rgba(249, 247, 251, 0.62);
+  background-color: var(--dd-surface-muted);
 }
 
 .dd-app .bg-slate-100 {
-  background-color: rgba(236, 232, 239, 0.8);
+  background-color: #eef0f2;
 }
 
 .dd-app .bg-slate-200 {
-  background-color: rgba(211, 205, 216, 0.78);
+  background-color: #dfe3e7;
 }
 
 .dd-app .border-slate-200,
 .dd-app .border-slate-300 {
-  border-color: rgba(38, 30, 43, 0.13);
+  border-color: var(--dd-border);
 }
 
 .dd-app .text-slate-950 {
@@ -379,48 +528,54 @@ input[type="checkbox"] {
 
 .dd-app .text-slate-700,
 .dd-app .text-slate-600 {
-  color: #554f5a;
+  color: var(--dd-secondary);
 }
 
 .dd-app .text-slate-500 {
-  color: #6d6672;
+  color: #6b7684;
 }
 
 .dd-app .bg-blue-600 {
-  background-color: var(--dd-dark);
+  background-color: var(--dd-primary);
 }
 
 .dd-app .hover\:bg-blue-700:hover {
-  background-color: #050407;
+  background-color: var(--dd-primary-hover);
 }
 
 .dd-app .bg-blue-50,
 .dd-app .bg-blue-50\/40 {
-  background-color: rgba(255, 255, 255, 0.56);
+  background-color: var(--dd-primary-soft);
 }
 
 .dd-app .text-blue-700,
 .dd-app .text-blue-800 {
-  color: #3d3046;
+  color: #1b64da;
 }
 
 .dd-app .accent-blue-600 {
-  accent-color: var(--dd-dark);
+  accent-color: var(--dd-primary);
 }
 
 .dd-app input:not([type="checkbox"]),
 .dd-app select {
-  border-color: rgba(38, 30, 43, 0.15);
+  border: 1px solid transparent;
   color: var(--dd-ink);
-  background-color: rgba(255, 255, 255, 0.75);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);
+  background-color: #f2f4f6;
+  box-shadow: none;
+}
+
+.dd-app input:not([type="checkbox"]):hover,
+.dd-app select:hover {
+  background-color: #eef1f4;
 }
 
 .dd-app input:not([type="checkbox"]):focus,
 .dd-app select:focus {
-  border-color: var(--dd-focus);
-  outline: 3px solid rgba(107, 73, 168, 0.17);
+  border-color: var(--dd-primary);
+  outline: 3px solid rgba(49, 130, 246, 0.14);
   outline-offset: 1px;
+  background: #fff;
 }
 
 .dd-app button,
@@ -432,73 +587,28 @@ input[type="checkbox"] {
     background-color 180ms ease,
     border-color 180ms ease,
     opacity 180ms ease,
-    box-shadow 180ms ease,
-    transform 180ms ease;
+    box-shadow 180ms ease;
 }
 
 .dd-app button:active:not(:disabled),
 .dd-app a:active {
-  transform: scale(0.985);
+  opacity: 0.78;
 }
 
 .dd-app :focus-visible {
-  outline: 3px solid rgba(255, 255, 255, 0.88);
-  outline-offset: 3px;
-  box-shadow: 0 0 0 6px rgba(67, 46, 83, 0.25);
+  outline: 3px solid rgba(49, 130, 246, 0.32);
+  outline-offset: 2px;
+  box-shadow: none;
 }
 
-.dd-workspace section[aria-labelledby="files-title"] > h2 {
-  color: rgba(255, 255, 255, 0.92);
-  text-shadow: 0 2px 12px rgba(44, 27, 48, 0.22);
-}
-
-.dd-share-ready > h1,
-.dd-share-ready > p {
-  color: #fff;
-  text-shadow: 0 2px 16px rgba(44, 27, 48, 0.22);
-}
-
-.dd-share-ready > span {
-  border-color: rgba(255, 255, 255, 0.4);
-  color: #143e2c;
-  background: rgba(225, 255, 238, 0.75);
-}
-
-.dd-share-ready .rounded-2xl,
-.dd-share-ready .rounded-xl {
-  border-color: rgba(255, 255, 255, 0.58);
-}
-
-.dd-about {
-  padding-top: 4px;
-}
-
-.dd-alert {
-  border-color: rgba(142, 38, 51, 0.22) !important;
-  background: rgba(255, 235, 236, 0.9) !important;
-  box-shadow: 0 18px 44px rgba(83, 30, 42, 0.16);
-  backdrop-filter: blur(20px);
-}
-
-.dd-dialog-backdrop {
-  background: rgba(18, 12, 22, 0.56);
-  backdrop-filter: blur(12px);
-  animation: dd-backdrop-in 180ms ease-out both;
-}
-
-.dd-dialog {
-  background: var(--dd-surface-strong) !important;
-  animation: dd-dialog-in 260ms cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-
-@keyframes dd-state-enter {
+@keyframes dd-content-in {
   from {
     opacity: 0;
-    transform: translateY(12px) scale(0.985);
+    transform: translateY(6px);
   }
   to {
     opacity: 1;
-    transform: translateY(0) scale(1);
+    transform: translateY(0);
   }
 }
 
@@ -511,36 +621,59 @@ input[type="checkbox"] {
 @keyframes dd-dialog-in {
   from {
     opacity: 0;
-    transform: translateY(12px) scale(0.975);
-  }
-}
-
-@media (max-height: 720px) {
-  .dd-stage {
-    min-height: 250px;
-    padding-top: 20px;
-  }
-
-  .dd-stage-title {
-    font-size: clamp(4rem, 10vw, 6rem);
+    transform: translateY(8px) scale(0.985);
   }
 }
 
 @media (max-width: 760px) {
-  .dd-stage {
-    min-height: 270px;
+  .dd-state-header {
+    grid-template-columns: 1fr;
+    gap: 18px;
+    padding-top: 38px;
   }
 
-  .dd-state-rail li {
-    padding-inline: 9px;
+  .dd-privacy-note {
+    width: fit-content;
   }
 
-  .dd-state-rail li span {
+  .dd-stepper {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    margin-top: 0;
+  }
+
+  .dd-stepper li {
+    justify-content: flex-start;
+  }
+
+  .dd-ready-summary,
+  .dd-section-heading {
+    align-items: flex-start;
+  }
+}
+
+@media (max-width: 480px) {
+  .dd-topbar-inner {
+    padding-inline: 16px;
+  }
+
+  .dd-nav-button {
+    padding-inline: 10px;
+  }
+
+  .dd-nav-button svg {
     display: none;
   }
 
-  .dd-workspace-heading {
-    align-items: flex-start;
+  .dd-workspace {
+    padding-inline: 16px;
+  }
+
+  .dd-state-heading h1 {
+    font-size: 1.8rem;
+  }
+
+  .dd-section-heading,
+  .dd-ready-summary {
     flex-direction: column;
   }
 }
@@ -553,12 +686,5 @@ input[type="checkbox"] {
     transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
-  }
-
-  .dd-app button:active:not(:disabled),
-  .dd-app a:active,
-  .dd-state-rail li.is-current,
-  .dd-drop-zone:hover {
-    transform: none;
   }
 }

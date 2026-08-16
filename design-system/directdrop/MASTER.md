@@ -1,210 +1,53 @@
-# Design System Master File
+# DirectDrop Design System
 
-> **LOGIC:** When building a specific page, first check `design-system/pages/[page-name].md`.
-> If that file exists, its rules **override** this Master file.
-> If not, strictly follow the rules below.
+## Direction
 
----
+DirectDrop is a calm desktop utility. The interface combines Apple-like restraint with Toss-like clarity: generous whitespace, short Korean copy, one strong action per screen, and almost no decorative motion.
 
-**Project:** DirectDrop
-**Generated:** 2026-08-16 23:26:36
-**Category:** File Manager & Transfer
+## Foundation
 
----
+| Token         | Value     | Usage                                   |
+| ------------- | --------- | --------------------------------------- |
+| Primary       | `#3182F6` | Primary action, current progress, focus |
+| Primary hover | `#1B64DA` | Hover and pressed emphasis              |
+| Background    | `#F2F4F6` | App canvas                              |
+| Surface       | `#FFFFFF` | Cards and dialogs                       |
+| Surface muted | `#F7F8FA` | Grouped controls and summaries          |
+| Foreground    | `#191F28` | Headings and important values           |
+| Secondary     | `#4E5968` | Body copy                               |
+| Muted         | `#8B95A1` | Labels and metadata                     |
+| Border        | `#E5E8EB` | Quiet separation                        |
+| Success       | `#00A878` | Online and privacy confirmation         |
+| Destructive   | `#E42939` | Errors and destructive actions          |
 
-## Global Rules
+Use the system font stack: SF Pro on macOS, Pretendard or Apple SD Gothic Neo for Korean, then Noto Sans KR and Inter fallbacks. Headings use 700 weight with tight Korean-safe tracking. Body text is 14–16px with 1.5–1.65 line height.
 
-### Color Palette
+## Components
 
-| Role        | Hex       | CSS Variable          |
-| ----------- | --------- | --------------------- |
-| Primary     | `#2563EB` | `--color-primary`     |
-| On Primary  | `#FFFFFF` | `--color-on-primary`  |
-| Secondary   | `#3B82F6` | `--color-secondary`   |
-| Accent/CTA  | `#D97706` | `--color-accent`      |
-| Background  | `#F8FAFC` | `--color-background`  |
-| Foreground  | `#0F172A` | `--color-foreground`  |
-| Muted       | `#F1F5FD` | `--color-muted`       |
-| Border      | `#E4ECFC` | `--color-border`      |
-| Destructive | `#DC2626` | `--color-destructive` |
-| Ring        | `#2563EB` | `--color-ring`        |
+- Cards: white, 22px radius, 1px quiet border, `0 1px 2px` shadow only.
+- Buttons: 44px minimum height, 12px radius. Primary is solid blue; secondary is white or neutral gray.
+- Inputs: neutral filled background, no heavy border at rest, blue border and focus halo when focused.
+- Navigation: compact neutral segmented control in a translucent white top bar.
+- Progress: four compact labeled steps. Current state uses blue fill; completed states use a pale blue tint.
+- Dialogs: white 24px surface over a 42% dark scrim, with a short fade and 8px rise.
 
-**Color Notes:** Folder blue + file amber
+## Interaction
 
-### Typography
+- Use 180–220ms transitions for feedback and content replacement.
+- Do not animate decorative backgrounds or run continuous animations.
+- Preserve visible keyboard focus and 44px minimum hit targets.
+- Respect `prefers-reduced-motion`.
+- Use icons only from Lucide with consistent 1.5–2px strokes.
 
-- **Heading Font:** Syncopate
-- **Body Font:** Space Mono
-- **Mood:** kinetic, motion, futuristic, speed, wide, tech
-- **Google Fonts:** [Syncopate + Space Mono](https://fonts.google.com/share?selection.family=Space+Mono:wght@400;700|Syncopate:wght@400;700)
+## Content
 
-**CSS Import:**
+- Prefer conversational Korean: explain what is happening and what the user should do next.
+- Keep English to the DirectDrop name and small product labels only.
+- Each view should expose one obvious primary action.
 
-```css
-@import url("https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syncopate:wght@400;700&display=swap");
-```
+## Avoid
 
-### Spacing Variables
-
-| Token         | Value             | Usage                     |
-| ------------- | ----------------- | ------------------------- |
-| `--space-xs`  | `4px` / `0.25rem` | Tight gaps                |
-| `--space-sm`  | `8px` / `0.5rem`  | Icon gaps, inline spacing |
-| `--space-md`  | `16px` / `1rem`   | Standard padding          |
-| `--space-lg`  | `24px` / `1.5rem` | Section padding           |
-| `--space-xl`  | `32px` / `2rem`   | Large gaps                |
-| `--space-2xl` | `48px` / `3rem`   | Section margins           |
-| `--space-3xl` | `64px` / `4rem`   | Hero padding              |
-
-### Shadow Depths
-
-| Level         | Value                          | Usage                       |
-| ------------- | ------------------------------ | --------------------------- |
-| `--shadow-sm` | `0 1px 2px rgba(0,0,0,0.05)`   | Subtle lift                 |
-| `--shadow-md` | `0 4px 6px rgba(0,0,0,0.1)`    | Cards, buttons              |
-| `--shadow-lg` | `0 10px 15px rgba(0,0,0,0.1)`  | Modals, dropdowns           |
-| `--shadow-xl` | `0 20px 25px rgba(0,0,0,0.15)` | Hero images, featured cards |
-
----
-
-## Component Specs
-
-### Buttons
-
-```css
-/* Primary Button */
-.btn-primary {
-  background: #d97706;
-  color: white;
-  padding: 12px 24px;
-  border-radius: 8px;
-  font-weight: 600;
-  transition: all 200ms ease;
-  cursor: pointer;
-}
-
-.btn-primary:hover {
-  opacity: 0.9;
-  transform: translateY(-1px);
-}
-
-/* Secondary Button */
-.btn-secondary {
-  background: transparent;
-  color: #2563eb;
-  border: 2px solid #2563eb;
-  padding: 12px 24px;
-  border-radius: 8px;
-  font-weight: 600;
-  transition: all 200ms ease;
-  cursor: pointer;
-}
-```
-
-### Cards
-
-```css
-.card {
-  background: #f8fafc;
-  border-radius: 12px;
-  padding: 24px;
-  box-shadow: var(--shadow-md);
-  transition: all 200ms ease;
-  cursor: pointer;
-}
-
-.card:hover {
-  box-shadow: var(--shadow-lg);
-  transform: translateY(-2px);
-}
-```
-
-### Inputs
-
-```css
-.input {
-  padding: 12px 16px;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  font-size: 16px;
-  transition: border-color 200ms ease;
-}
-
-.input:focus {
-  border-color: #2563eb;
-  outline: none;
-  box-shadow: 0 0 0 3px #2563eb20;
-}
-```
-
-### Modals
-
-```css
-.modal-overlay {
-  background: rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(4px);
-}
-
-.modal {
-  background: white;
-  border-radius: 16px;
-  padding: 32px;
-  box-shadow: var(--shadow-xl);
-  max-width: 500px;
-  width: 90%;
-}
-```
-
----
-
-## Style Guidelines
-
-**Style:** Exaggerated Minimalism
-
-**Keywords:** Bold minimalism, oversized typography, high contrast, negative space, loud minimal, statement design
-
-**Best For:** Fashion, architecture, portfolios, agency landing pages, luxury brands, editorial
-
-**Key Effects:** font-size: clamp(3rem 10vw 12rem), font-weight: 900, letter-spacing: -0.05em, massive whitespace
-
-### Page Pattern
-
-**Pattern Name:** App Store Style Landing
-
-- **Conversion Strategy:** Show real screenshots. Include ratings (4.5+ stars). QR code for mobile. Platform-specific CTAs.
-- **CTA Placement:** Download buttons prominent (App Store + Play Store) throughout
-- **Section Order:** 1. Hero with device mockup, 2. Screenshots carousel, 3. Features with icons, 4. Reviews/ratings, 5. Download CTAs
-
----
-
-## Anti-Patterns (Do NOT Use)
-
-- ❌ Excessive decoration
-- ❌ Complex shadows
-- ❌ 3D effects
-
-### Additional Forbidden Patterns
-
-- ❌ **Emojis as icons** — Use SVG icons (Heroicons, Lucide, Simple Icons)
-- ❌ **Missing cursor:pointer** — All clickable elements must have cursor:pointer
-- ❌ **Layout-shifting hovers** — Avoid scale transforms that shift layout
-- ❌ **Low contrast text** — Maintain 4.5:1 minimum contrast ratio
-- ❌ **Instant state changes** — Always use transitions (150-300ms)
-- ❌ **Invisible focus states** — Focus states must be visible for a11y
-
----
-
-## Pre-Delivery Checklist
-
-Before delivering any UI code, verify:
-
-- [ ] No emojis used as icons (use SVG instead)
-- [ ] All icons from consistent icon set (Heroicons/Lucide)
-- [ ] `cursor-pointer` on all clickable elements
-- [ ] Hover states with smooth transitions (150-300ms)
-- [ ] Light mode: text contrast 4.5:1 minimum
-- [ ] Focus states visible for keyboard navigation
-- [ ] `prefers-reduced-motion` respected
-- [ ] Responsive: 375px, 768px, 1024px, 1440px
-- [ ] No content hidden behind fixed navbars
-- [ ] No horizontal scroll on mobile
+- Gradients, particle effects, oversized English state words, glass cards, glow effects, and deep shadows.
+- Multiple competing primary buttons.
+- Gray text below accessible contrast or icon-only controls without labels.
+- Layout-shifting hover effects and animations longer than 300ms.

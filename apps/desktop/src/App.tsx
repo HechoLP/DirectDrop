@@ -50,7 +50,6 @@ import {
   type ShareSettings,
 } from "./settings";
 import { SenderTransfer } from "./sender-transfer";
-import { AmbientCanvas } from "./AmbientCanvas";
 import {
   isTauri,
   quitApp,
@@ -133,19 +132,6 @@ export function App() {
     transferStates: Object.values(transfers).map((transfer) => transfer.state),
     hasError: Boolean(error),
   });
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      const reducedMotion = window.matchMedia(
-        "(prefers-reduced-motion: reduce)",
-      ).matches;
-      document.scrollingElement?.scrollTo({
-        top: 0,
-        behavior: reducedMotion ? "auto" : "smooth",
-      });
-    }, 180);
-    return () => window.clearTimeout(timer);
-  }, [visualState]);
 
   useEffect(() => {
     filesRef.current = files;
@@ -504,11 +490,10 @@ export function App() {
 
   return (
     <div className={`dd-app dd-state-${visualState}`}>
-      <AmbientCanvas state={visualState} />
       <header className="dd-topbar">
-        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5 lg:px-8">
-          <BrandMark inverse />
-          <nav className="flex items-center gap-1" aria-label="앱 메뉴">
+        <div className="dd-topbar-inner mx-auto flex h-16 max-w-5xl items-center justify-between px-5 lg:px-8">
+          <BrandMark />
+          <nav className="dd-nav flex items-center" aria-label="앱 메뉴">
             <Button
               onClick={() => setTab("share")}
               aria-current={tab === "share" ? "page" : undefined}
@@ -527,9 +512,7 @@ export function App() {
         </div>
       </header>
 
-      <StateStage state={visualState} />
-
-      <main className="dd-workspace mx-auto max-w-6xl px-5 pb-10 lg:px-8">
+      <main className="dd-workspace mx-auto max-w-5xl px-5 pb-12 lg:px-8">
         {tab === "about" ? (
           <About
             autoStart={autoStart}
@@ -541,125 +524,120 @@ export function App() {
               setAutoStart(enabled);
             }}
           />
-        ) : share ? (
-          <ShareReady
-            share={share}
-            files={files}
-            online={online}
-            completed={completedDownloads}
-            limit={settings.downloadLimit}
-            transfers={transfers}
-            onCopy={() => void copyLink()}
-            onShare={() => void shareLink()}
-            onShowQr={() => setShowQr(true)}
-            onSaveQr={saveQr}
-            onStop={() => void stopShare()}
-          />
         ) : (
           <>
-            <div className="dd-workspace-heading mb-5 flex items-end justify-between gap-4">
-              <div>
-                <p className="dd-kicker">NEW DIRECT SHARE</p>
-                <h1 className="mt-1 text-xl font-bold tracking-[-.03em]">
-                  클라우드에 올리지 않고 바로 전달하세요.
-                </h1>
-                <p className="mt-1.5 text-sm text-slate-600">
-                  원본 파일은 현재 위치에 그대로 유지됩니다.
-                </p>
-              </div>
-              <span className="dd-local-badge shrink-0">
-                <CloudOff aria-hidden="true" size={14} /> LOCAL ONLY
-              </span>
-            </div>
-            <div className="grid gap-6 lg:grid-cols-[1.1fr_.9fr]">
-              <section aria-labelledby="files-title">
-                <h2 id="files-title" className="mb-3 text-sm font-bold">
-                  공유할 파일
-                </h2>
-                {!files.length ? (
-                  <button
-                    onClick={() => void selectFiles()}
-                    className="dd-drop-zone flex min-h-[330px] w-full cursor-pointer flex-col items-center justify-center rounded-3xl border-2 border-dashed border-slate-300 bg-white p-8 text-center transition-colors hover:border-blue-500 hover:bg-blue-50/40 focus-visible:ring-3 focus-visible:ring-blue-500/35"
-                  >
-                    <span className="grid size-14 place-items-center rounded-2xl bg-blue-50 text-blue-700">
-                      <UploadCloud aria-hidden="true" size={27} />
-                    </span>
-                    <strong className="mt-5 text-lg">
-                      파일을 여기에 놓으세요
-                    </strong>
-                    <span className="mt-2 text-sm text-slate-500">
-                      여러 파일을 한 번에 선택할 수 있습니다.
-                    </span>
-                    <span className="mt-6 inline-flex min-h-11 items-center rounded-xl bg-blue-600 px-4 text-sm font-semibold text-white">
-                      <FilePlus2
-                        aria-hidden="true"
-                        className="mr-2"
-                        size={18}
-                      />{" "}
-                      파일 선택
-                    </span>
-                    <span className="mt-4 flex items-center gap-1.5 text-xs font-medium text-slate-500">
-                      <CloudOff aria-hidden="true" size={15} /> 파일은 서버에
-                      업로드되지 않습니다.
-                    </span>
-                  </button>
-                ) : (
-                  <div className="dd-panel overflow-hidden rounded-2xl border border-slate-200 bg-white">
-                    <ul className="divide-y divide-slate-200">
-                      {files.map((file) => (
-                        <li
-                          key={file.id}
-                          className="flex min-w-0 items-center gap-3 px-4 py-3"
-                        >
-                          <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-blue-50 text-blue-700">
-                            <Files aria-hidden="true" size={18} />
-                          </span>
-                          <span className="min-w-0 flex-1">
-                            <span
-                              title={file.name}
-                              className="block truncate text-sm font-semibold"
-                            >
-                              {file.name}
-                            </span>
-                            <span className="tabular mt-0.5 block text-xs text-slate-500">
-                              {formatBytes(file.size)}
-                            </span>
-                          </span>
-                          <button
-                            onClick={() => void removeFile(file)}
-                            className="grid size-11 cursor-pointer place-items-center rounded-xl text-slate-500 hover:bg-red-50 hover:text-red-700"
-                            aria-label={`${file.name} 제거`}
-                          >
-                            <Trash2 aria-hidden="true" size={17} />
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                    <div className="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-4 py-3">
-                      <span className="text-sm font-semibold">
-                        총 {files.length}개
-                      </span>
-                      <span className="tabular text-sm font-bold">
-                        {formatBytes(totalSize)}
-                      </span>
-                    </div>
-                    <Button
-                      onClick={() => void selectFiles()}
-                      className="m-3 border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
-                    >
-                      <FilePlus2 aria-hidden="true" size={17} /> 파일 추가
-                    </Button>
-                  </div>
-                )}
-              </section>
-              <SettingsPanel
-                settings={settings}
-                onChange={setSettings}
-                onStart={() => void createShare()}
-                creating={creating}
-                disabled={!files.length}
+            <StateHeader state={visualState} />
+            {share ? (
+              <ShareReady
+                share={share}
+                files={files}
+                online={online}
+                completed={completedDownloads}
+                limit={settings.downloadLimit}
+                transfers={transfers}
+                onCopy={() => void copyLink()}
+                onShare={() => void shareLink()}
+                onShowQr={() => setShowQr(true)}
+                onSaveQr={saveQr}
+                onStop={() => void stopShare()}
               />
-            </div>
+            ) : (
+              <div className="dd-compose-grid grid gap-5 lg:grid-cols-[1.08fr_.92fr]">
+                <section aria-labelledby="files-title">
+                  <div className="dd-section-heading">
+                    <div>
+                      <p className="dd-kicker">1단계</p>
+                      <h2 id="files-title">파일 선택</h2>
+                    </div>
+                    <span className="dd-local-badge shrink-0">
+                      <CloudOff aria-hidden="true" size={15} /> 서버 저장 없음
+                    </span>
+                  </div>
+                  {!files.length ? (
+                    <button
+                      onClick={() => void selectFiles()}
+                      className="dd-drop-zone flex min-h-[330px] w-full cursor-pointer flex-col items-center justify-center rounded-3xl bg-white p-8 text-center"
+                    >
+                      <span className="dd-drop-icon grid size-14 place-items-center rounded-2xl bg-blue-50 text-blue-700">
+                        <UploadCloud aria-hidden="true" size={27} />
+                      </span>
+                      <strong className="mt-5 text-lg">
+                        보낼 파일을 선택하세요
+                      </strong>
+                      <span className="mt-2 text-sm text-slate-500">
+                        이곳으로 여러 파일을 끌어다 놓아도 됩니다.
+                      </span>
+                      <span className="dd-drop-action mt-6 inline-flex min-h-11 items-center rounded-xl bg-blue-600 px-4 text-sm font-semibold text-white">
+                        <FilePlus2
+                          aria-hidden="true"
+                          className="mr-2"
+                          size={18}
+                        />{" "}
+                        파일 선택
+                      </span>
+                      <span className="mt-4 flex items-center gap-1.5 text-xs font-medium text-slate-500">
+                        <ShieldCheck aria-hidden="true" size={15} /> 파일은
+                        상대방 기기로 직접 전송됩니다.
+                      </span>
+                    </button>
+                  ) : (
+                    <div className="dd-panel overflow-hidden rounded-2xl bg-white">
+                      <ul className="divide-y divide-slate-200">
+                        {files.map((file) => (
+                          <li
+                            key={file.id}
+                            className="flex min-w-0 items-center gap-3 px-4 py-3"
+                          >
+                            <span className="dd-file-icon grid size-10 shrink-0 place-items-center rounded-xl bg-blue-50 text-blue-700">
+                              <Files aria-hidden="true" size={18} />
+                            </span>
+                            <span className="min-w-0 flex-1">
+                              <span
+                                title={file.name}
+                                className="block truncate text-sm font-semibold"
+                              >
+                                {file.name}
+                              </span>
+                              <span className="tabular mt-0.5 block text-xs text-slate-500">
+                                {formatBytes(file.size)}
+                              </span>
+                            </span>
+                            <button
+                              onClick={() => void removeFile(file)}
+                              className="dd-icon-button grid size-11 cursor-pointer place-items-center rounded-xl text-slate-500 hover:bg-red-50 hover:text-red-700"
+                              aria-label={`${file.name} 제거`}
+                            >
+                              <Trash2 aria-hidden="true" size={17} />
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                      <div className="dd-file-summary flex items-center justify-between border-t border-slate-200 bg-slate-50 px-4 py-3">
+                        <span className="text-sm font-semibold">
+                          파일 {files.length}개
+                        </span>
+                        <span className="tabular text-sm font-bold">
+                          {formatBytes(totalSize)}
+                        </span>
+                      </div>
+                      <Button
+                        onClick={() => void selectFiles()}
+                        className="dd-secondary-button m-3 border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
+                      >
+                        <FilePlus2 aria-hidden="true" size={17} /> 파일 추가
+                      </Button>
+                    </div>
+                  )}
+                </section>
+                <SettingsPanel
+                  settings={settings}
+                  onChange={setSettings}
+                  onStart={() => void createShare()}
+                  creating={creating}
+                  disabled={!files.length}
+                />
+              </div>
+            )}
           </>
         )}
         {error && (
@@ -703,25 +681,30 @@ export function App() {
   );
 }
 
-function StateStage({ state }: { state: AppVisualState }) {
+function StateHeader({ state }: { state: AppVisualState }) {
   const copy = visualStateCopy[state];
   const steps = [
-    { label: "Select", icon: FilePlus2 },
-    { label: "Ready", icon: Settings2 },
-    { label: "Share", icon: Radio },
-    { label: "Transfer", icon: Share2 },
+    { label: "파일 선택", icon: FilePlus2 },
+    { label: "공유 설정", icon: Settings2 },
+    { label: "연결 대기", icon: Radio },
+    { label: "파일 전송", icon: Share2 },
   ];
 
   return (
-    <section className="dd-stage" aria-live="polite" aria-atomic="true">
-      <p className="dd-stage-kicker">
-        <span aria-hidden="true" /> P2P · NO CLOUD
-      </p>
-      <div className="dd-stage-copy" key={state}>
-        <div className="dd-stage-title">{copy.label}</div>
+    <section className="dd-state-header" aria-live="polite" aria-atomic="true">
+      <div className="dd-state-heading" key={state}>
+        <p className="dd-kicker">DIRECT TRANSFER</p>
+        <h1>{copy.label}</h1>
         <p>{copy.description}</p>
       </div>
-      <ol className="dd-state-rail" aria-label="공유 진행 상태">
+      <div className="dd-privacy-note">
+        <ShieldCheck aria-hidden="true" size={18} />
+        <span>
+          <strong>클라우드 저장 없이</strong>
+          기기 사이에서 직접 전송해요
+        </span>
+      </div>
+      <ol className="dd-stepper" aria-label="공유 진행 상태">
         {steps.map((step, index) => {
           const Icon = step.icon;
           const current = index === copy.step;
@@ -732,7 +715,13 @@ function StateStage({ state }: { state: AppVisualState }) {
               data-complete={index < copy.step || undefined}
               aria-current={current ? "step" : undefined}
             >
-              <Icon aria-hidden="true" size={14} />
+              <span className="dd-step-icon">
+                {index < copy.step ? (
+                  <Check aria-hidden="true" size={14} />
+                ) : (
+                  <Icon aria-hidden="true" size={14} />
+                )}
+              </span>
               <span>{step.label}</span>
             </li>
           );
@@ -767,11 +756,16 @@ function SettingsPanel({
       aria-labelledby="settings-title"
       className="dd-panel dd-settings-panel rounded-2xl border border-slate-200 bg-white p-5"
     >
-      <div className="flex items-center gap-2">
-        <Settings2 aria-hidden="true" size={19} />
-        <h2 id="settings-title" className="font-bold">
-          공유 설정
-        </h2>
+      <div className="dd-settings-heading flex items-center justify-between gap-3">
+        <div>
+          <p className="dd-kicker">2단계</p>
+          <h2 id="settings-title" className="font-bold">
+            공유 설정
+          </h2>
+        </div>
+        <span className="dd-settings-icon" aria-hidden="true">
+          <Settings2 size={18} />
+        </span>
       </div>
       <div className="mt-5 space-y-5">
         <fieldset>
@@ -788,7 +782,12 @@ function SettingsPanel({
                     appLifetime: false,
                   })
                 }
-                className="min-h-16 cursor-pointer rounded-xl border border-slate-200 px-2 text-left hover:border-blue-500 hover:bg-blue-50"
+                aria-pressed={
+                  !settings.appLifetime &&
+                  settings.downloadLimit === preset.downloadLimit &&
+                  settings.expiresInMs === preset.expiresInMs
+                }
+                className="dd-preset min-h-16 cursor-pointer rounded-xl border border-slate-200 px-3 text-left hover:border-blue-500 hover:bg-blue-50"
               >
                 <span className="block text-xs font-bold">{preset.label}</span>
                 <span className="mt-1 block text-[11px] text-slate-500">
@@ -908,14 +907,14 @@ function SettingsPanel({
             <option value="MANUAL">매번 승인</option>
           </select>
         </label>
-        <label className="flex min-h-11 cursor-pointer items-center gap-3 rounded-xl bg-slate-50 px-3 text-sm">
+        <label className="dd-setting-toggle flex min-h-14 cursor-pointer items-center gap-3 rounded-xl bg-slate-50 px-3 text-sm">
           <input
             type="checkbox"
             checked={settings.allowRelay}
             onChange={(event) =>
               onChange({ ...settings, allowRelay: event.target.checked })
             }
-            className="size-4 accent-blue-600"
+            className="dd-switch shrink-0"
           />
           <span>
             <strong className="block">직접 연결 실패 시 Relay 허용</strong>
@@ -927,7 +926,7 @@ function SettingsPanel({
         <Button
           onClick={onStart}
           disabled={disabled || creating}
-          className="w-full bg-blue-600 text-white hover:bg-blue-700"
+          className="dd-primary-button w-full bg-blue-600 text-white hover:bg-blue-700"
         >
           {creating ? (
             <LoaderCircle
@@ -989,30 +988,38 @@ function ShareReady({
 
   return (
     <div className="dd-share-ready mx-auto max-w-4xl">
-      <StatusPill tone={online ? "success" : "warning"}>
-        <Radio aria-hidden="true" size={13} /> {online ? "온라인" : "연결 중"}
-      </StatusPill>
-      <h1 className="mt-5 text-3xl font-bold tracking-[-.03em]">
-        공유 준비 완료
-      </h1>
-      <p className="mt-2 text-sm text-slate-600">
-        {files[0]?.name}
-        {files.length > 1 ? ` 외 ${files.length - 1}개` : ""} ·{" "}
-        {formatBytes(files.reduce((sum, file) => sum + file.size, 0))}
-      </p>
-      <div className="mt-8 grid gap-6 md:grid-cols-[1fr_260px]">
+      <div className="dd-ready-summary flex items-center justify-between gap-4">
+        <div>
+          <StatusPill tone={online ? "success" : "warning"}>
+            <Radio aria-hidden="true" size={13} />
+            {online ? "링크 활성화됨" : "연결 중"}
+          </StatusPill>
+          <p className="mt-3 text-sm font-semibold text-slate-700">
+            {files[0]?.name}
+            {files.length > 1 ? ` 외 ${files.length - 1}개` : ""}
+          </p>
+          <p className="tabular mt-1 text-xs text-slate-500">
+            {files.length}개 ·{" "}
+            {formatBytes(files.reduce((sum, file) => sum + file.size, 0))}
+          </p>
+        </div>
+        <span className="dd-local-badge shrink-0">
+          <ShieldCheck aria-hidden="true" size={15} /> 직접 전송
+        </span>
+      </div>
+      <div className="mt-5 grid gap-5 md:grid-cols-[1fr_240px]">
         <section className="space-y-5">
           <div className="rounded-2xl border border-slate-200 bg-white p-4">
-            <label className="text-xs font-semibold text-slate-500">
+            <label className="dd-field-label text-xs font-semibold text-slate-500">
               공유 링크
             </label>
-            <p className="mt-2 break-all text-sm font-semibold text-blue-800">
+            <p className="dd-share-url mt-2 break-all text-sm font-semibold text-blue-800">
               {share.url}
             </p>
             <div className="mt-4 flex flex-wrap gap-2">
               <Button
                 onClick={onCopy}
-                className="bg-blue-600 text-white hover:bg-blue-700"
+                className="dd-primary-button bg-blue-600 text-white hover:bg-blue-700"
               >
                 <Copy aria-hidden="true" size={17} /> 복사
               </Button>
@@ -1120,11 +1127,11 @@ function About({
     <div className="dd-about mx-auto max-w-2xl">
       <div className="dd-panel rounded-2xl border border-slate-200 bg-white p-7">
         <BrandMark />
-        <h1 className="mt-6 text-2xl font-bold">DirectDrop</h1>
-        <p className="mt-1 text-sm text-slate-500">Version 0.1.1</p>
+        <h1 className="mt-6 text-2xl font-bold">DirectDrop 정보</h1>
+        <p className="mt-1 text-sm text-slate-500">Version 0.1.2</p>
         <p className="mt-5 text-sm leading-6 text-slate-600">
-          Direct files. No cloud. 파일은 서버에 저장되지 않으며 WebRTC P2P로
-          직접 전송됩니다.
+          파일을 서버에 저장하지 않고 WebRTC P2P로 상대방 기기에 직접
+          전송합니다.
         </p>
         <div className="mt-6 grid gap-3">
           <a
@@ -1134,7 +1141,7 @@ function About({
             className="flex min-h-11 items-center justify-between rounded-xl border border-slate-200 px-4 text-sm font-semibold hover:bg-slate-50"
           >
             <span className="flex items-center gap-2">
-              <Link2 aria-hidden="true" size={17} /> Website
+              <Link2 aria-hidden="true" size={17} /> 웹사이트
             </span>
             <span className="text-slate-500">share.dlfkd.dev</span>
           </a>
@@ -1144,7 +1151,7 @@ function About({
             rel="noreferrer"
             className="flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 px-4 text-sm font-semibold hover:bg-slate-50"
           >
-            <Download aria-hidden="true" size={17} /> Latest Release
+            <Download aria-hidden="true" size={17} /> 최신 버전 다운로드
           </a>
           <a
             href="https://github.com/HechoLP/directdrop/issues"
@@ -1152,7 +1159,7 @@ function About({
             rel="noreferrer"
             className="flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 px-4 text-sm font-semibold hover:bg-slate-50"
           >
-            <AlertTriangle aria-hidden="true" size={17} /> Report Issue
+            <AlertTriangle aria-hidden="true" size={17} /> 문제 신고
           </a>
         </div>
         <label className="mt-6 flex min-h-12 cursor-pointer items-center justify-between gap-4 border-t border-slate-200 pt-5 text-sm font-semibold">
@@ -1163,7 +1170,7 @@ function About({
             type="checkbox"
             checked={autoStart}
             onChange={(event) => void onAutoStart(event.target.checked)}
-            className="size-4 accent-blue-600"
+            className="dd-switch shrink-0"
           />
         </label>
         <label className="flex min-h-12 cursor-pointer items-center justify-between gap-4 text-sm font-semibold">
@@ -1174,7 +1181,7 @@ function About({
             type="checkbox"
             checked={notificationsEnabled}
             onChange={(event) => onNotificationsEnabled(event.target.checked)}
-            className="size-4 accent-blue-600"
+            className="dd-switch shrink-0"
           />
         </label>
       </div>
