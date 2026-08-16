@@ -16,6 +16,7 @@
 html {
   min-width: 320px;
   background: #f8fafc;
+  scroll-behavior: smooth;
 }
 body {
   min-width: 320px;
@@ -29,10 +30,14 @@ select {
   font: inherit;
   touch-action: manipulation;
 }
+summary::-webkit-details-marker {
+  display: none;
+}
 button:focus-visible,
 a:focus-visible,
 input:focus-visible,
-select:focus-visible {
+select:focus-visible,
+summary:focus-visible {
   outline: 3px solid rgb(37 99 235 / 35%);
   outline-offset: 2px;
 }
