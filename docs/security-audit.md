@@ -1,8 +1,11 @@
 # DirectDrop Security Audit
 
-감사일: 2026-08-17  
-대상 버전: 0.1.4  
-감사 기준 커밋: `cf6cd3c0805db6e3bbae3cccde24f157313ce6ac`  
+감사일: 2026-08-17
+
+대상 버전: 0.1.4
+
+감사 기준 커밋: `cf6cd3c0805db6e3bbae3cccde24f157313ce6ac`
+
 보안 수정 커밋: `49ddacb`
 
 ## 범위와 Threat Model

@@ -4,10 +4,14 @@
 
 **Release readiness: NOT READY FOR RELEASE**
 
-감사일: 2026-08-17  
-감사 버전: 0.1.4  
-감사 기준: `cf6cd3c0805db6e3bbae3cccde24f157313ce6ac`  
-보안/안정성 수정: `49ddacb`  
+감사일: 2026-08-17
+
+감사 버전: 0.1.4
+
+감사 기준: `cf6cd3c0805db6e3bbae3cccde24f157313ce6ac`
+
+보안/안정성 수정: `49ddacb`
+
 CI 공급망 고정: `c7695b6`
 
 코드의 발견된 CRITICAL/HIGH 문제는 수정되고 회귀 테스트가 통과했습니다. 그러나 현재 감사 커밋의 Windows installer와 실제 브라우저별 전송이 검증되지 않았고, macOS artifact가 공증되지 않았으며, Nearby transport 자체가 미구현입니다. 운영 `share.dlfkd.dev`도 아직 0.1.0이어서 local hardening이 배포되지 않았습니다. 따라서 Release Gate를 통과하지 않습니다.
