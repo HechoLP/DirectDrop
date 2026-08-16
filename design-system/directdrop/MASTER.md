@@ -7,7 +7,7 @@
 ---
 
 **Project:** DirectDrop
-**Generated:** 2026-08-16 21:36:52
+**Generated:** 2026-08-16 23:26:36
 **Category:** File Manager & Transfer
 
 ---
@@ -33,15 +33,15 @@
 
 ### Typography
 
-- **Heading Font:** Noto Sans KR
-- **Body Font:** Noto Sans KR
-- **Mood:** korean, modern, clean, professional, multilingual, readable
-- **Google Fonts:** [Noto Sans KR + Noto Sans KR](https://fonts.google.com/share?selection.family=Noto+Sans+KR:wght@300;400;500;700)
+- **Heading Font:** Syncopate
+- **Body Font:** Space Mono
+- **Mood:** kinetic, motion, futuristic, speed, wide, tech
+- **Google Fonts:** [Syncopate + Space Mono](https://fonts.google.com/share?selection.family=Space+Mono:wght@400;700|Syncopate:wght@400;700)
 
 **CSS Import:**
 
 ```css
-@import url("https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syncopate:wght@400;700&display=swap");
 ```
 
 ### Spacing Variables
@@ -159,21 +159,21 @@
 
 ## Style Guidelines
 
-**Style:** Flat Design
+**Style:** Exaggerated Minimalism
 
-**Keywords:** 2D, minimalist, bold colors, no shadows, clean lines, simple shapes, typography-focused, modern, icon-heavy
+**Keywords:** Bold minimalism, oversized typography, high contrast, negative space, loud minimal, statement design
 
-**Best For:** Web apps, mobile apps, cross-platform, startup MVPs, user-friendly, SaaS, dashboards, corporate
+**Best For:** Fashion, architecture, portfolios, agency landing pages, luxury brands, editorial
 
-**Key Effects:** No gradients/shadows, simple hover (color/opacity shift), fast loading, clean transitions (150-200ms ease), minimal icons
+**Key Effects:** font-size: clamp(3rem 10vw 12rem), font-weight: 900, letter-spacing: -0.05em, massive whitespace
 
 ### Page Pattern
 
-**Pattern Name:** Minimal Single Column
+**Pattern Name:** App Store Style Landing
 
-- **Conversion Strategy:** Single CTA focus. Large typography. Lots of whitespace. No nav clutter. Mobile-first.
-- **CTA Placement:** Center, large CTA button
-- **Section Order:** 1. Hero headline, 2. Short description, 3. Benefit bullets (3 max), 4. CTA, 5. Footer
+- **Conversion Strategy:** Show real screenshots. Include ratings (4.5+ stars). QR code for mobile. Platform-specific CTAs.
+- **CTA Placement:** Download buttons prominent (App Store + Play Store) throughout
+- **Section Order:** 1. Hero with device mockup, 2. Screenshots carousel, 3. Features with icons, 4. Reviews/ratings, 5. Download CTAs
 
 ---
 

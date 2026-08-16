@@ -3,15 +3,26 @@
 
 :root {
   font-family:
-    "Noto Sans KR", "Apple SD Gothic Neo", Pretendard, system-ui, sans-serif;
-  color: #0f172a;
-  background: #f8fafc;
+    Inter, "Noto Sans KR", "Apple SD Gothic Neo", Pretendard, system-ui,
+    sans-serif;
+  color: #18151d;
+  background: #0d0a10;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
+  --dd-ink: #18151d;
+  --dd-muted: #67616d;
+  --dd-surface: rgba(255, 255, 255, 0.84);
+  --dd-surface-strong: rgba(255, 255, 255, 0.94);
+  --dd-border: rgba(255, 255, 255, 0.58);
+  --dd-dark: #17131c;
+  --dd-focus: #6b49a8;
+  --dd-shadow: 0 24px 70px rgba(29, 18, 38, 0.2);
 }
+
 * {
   box-sizing: border-box;
 }
+
 html,
 body,
 #root {
@@ -19,27 +30,535 @@ body,
   min-height: 100%;
   margin: 0;
 }
+
 body {
   min-height: 100dvh;
   overflow-x: hidden;
-  background: #f8fafc;
+  background: #0d0a10;
 }
+
 button,
 input,
 select {
   font: inherit;
   touch-action: manipulation;
 }
+
+button,
+a,
+select,
+input[type="checkbox"] {
+  -webkit-tap-highlight-color: transparent;
+}
+
 .tabular {
   font-variant-numeric: tabular-nums;
+}
+
+.dd-app {
+  --dd-canvas-from: #f4bee5;
+  --dd-canvas-mid: #ffe5c6;
+  --dd-canvas-to: #a68edb;
+  position: relative;
+  z-index: 0;
+  min-height: 100dvh;
+  overflow: hidden;
+  color: var(--dd-ink);
+  background: linear-gradient(
+    135deg,
+    var(--dd-canvas-from),
+    var(--dd-canvas-mid) 54%,
+    var(--dd-canvas-to)
+  );
+  isolation: isolate;
+}
+
+.dd-state-ready {
+  --dd-canvas-from: #fcd3b2;
+  --dd-canvas-mid: #fff2d5;
+  --dd-canvas-to: #bba4e0;
+}
+
+.dd-state-connect {
+  --dd-canvas-from: #a4d0f2;
+  --dd-canvas-mid: #e0f4ff;
+  --dd-canvas-to: #a788da;
+}
+
+.dd-state-live {
+  --dd-canvas-from: #c4b4ec;
+  --dd-canvas-mid: #e2fff4;
+  --dd-canvas-to: #79b4cf;
+}
+
+.dd-state-transfer {
+  --dd-canvas-from: #fbdda4;
+  --dd-canvas-mid: #fff0d6;
+  --dd-canvas-to: #c99bc4;
+}
+
+.dd-state-complete {
+  --dd-canvas-from: #9ee1c8;
+  --dd-canvas-mid: #e9ffef;
+  --dd-canvas-to: #83bce1;
+}
+
+.dd-state-error {
+  --dd-canvas-from: #f4a4a6;
+  --dd-canvas-mid: #ffdeca;
+  --dd-canvas-to: #be82bc;
+}
+
+.dd-state-about {
+  --dd-canvas-from: #afc4ef;
+  --dd-canvas-mid: #ede7ff;
+  --dd-canvas-to: #bb9be0;
+}
+
+.dd-app::before {
+  position: fixed;
+  z-index: 1;
+  inset: 0;
+  background:
+    radial-gradient(
+        circle at center,
+        rgba(255, 255, 255, 0.43) 0 1.15px,
+        transparent 1.45px
+      )
+      0 0 / 10px 10px,
+    linear-gradient(180deg, rgba(10, 7, 12, 0.42), transparent 22%),
+    linear-gradient(0deg, rgba(31, 21, 38, 0.14), transparent 46%);
+  content: "";
+  pointer-events: none;
+}
+
+.dd-ambient {
+  position: fixed;
+  z-index: 0;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.dd-topbar {
+  position: relative;
+  z-index: 30;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(13, 10, 16, 0.48);
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.06);
+  backdrop-filter: blur(22px) saturate(125%);
+}
+
+.dd-nav-button {
+  min-height: 38px;
+  border: 1px solid transparent;
+  border-radius: 11px;
+  color: rgba(255, 255, 255, 0.72);
+  background: transparent;
+}
+
+.dd-nav-button:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.dd-nav-button.is-active {
+  color: var(--dd-dark);
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.14);
+}
+
+.dd-stage {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  min-height: clamp(260px, 39vh, 350px);
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 28px 24px 56px;
+  color: #fff;
+  text-align: center;
+}
+
+.dd-stage-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 10px;
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+}
+
+.dd-stage-kicker span {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: currentColor;
+  box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.12);
+}
+
+.dd-stage-copy {
+  animation: dd-state-enter 360ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.dd-stage-title {
+  margin: 0;
+  color: #fff;
+  font-size: clamp(4.2rem, 11vw, 7.4rem);
+  font-weight: 800;
+  letter-spacing: -0.075em;
+  line-height: 0.9;
+  text-shadow: 0 4px 30px rgba(53, 32, 59, 0.17);
+}
+
+.dd-stage-copy p {
+  margin: 15px 0 0;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 14px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  text-shadow: 0 2px 16px rgba(44, 27, 48, 0.22);
+}
+
+.dd-state-rail {
+  position: absolute;
+  bottom: 20px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  max-width: calc(100% - 32px);
+  margin: 0;
+  padding: 4px;
+  overflow-x: auto;
+  border: 1px solid rgba(255, 255, 255, 0.23);
+  border-radius: 14px;
+  background: rgba(45, 32, 52, 0.16);
+  box-shadow:
+    0 12px 34px rgba(42, 25, 51, 0.14),
+    inset 0 1px 0 rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(18px) saturate(120%);
+  list-style: none;
+  scrollbar-width: none;
+}
+
+.dd-state-rail::-webkit-scrollbar {
+  display: none;
+}
+
+.dd-state-rail li {
+  display: inline-flex;
+  min-height: 31px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 11px;
+  border-radius: 10px;
+  color: rgba(255, 255, 255, 0.63);
+  font-size: 12px;
+  font-weight: 650;
+  white-space: nowrap;
+  transition:
+    color 180ms ease,
+    background-color 180ms ease,
+    transform 180ms ease;
+}
+
+.dd-state-rail li[data-complete="true"] {
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.dd-state-rail li.is-current {
+  color: #17131c;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 4px 14px rgba(38, 24, 47, 0.14);
+  transform: translateY(-1px);
+}
+
+.dd-workspace {
+  position: relative;
+  z-index: 2;
+}
+
+.dd-workspace-heading,
+.dd-panel,
+.dd-drop-zone,
+.dd-dialog {
+  border: 1px solid var(--dd-border) !important;
+  background: var(--dd-surface) !important;
+  box-shadow: var(--dd-shadow);
+  backdrop-filter: blur(28px) saturate(120%);
+}
+
+.dd-workspace-heading {
+  padding: 18px 20px;
+  border-radius: 22px;
+}
+
+.dd-kicker {
+  margin: 0;
+  color: #74657e;
+  font-size: 10px;
+  font-weight: 850;
+  letter-spacing: 0.14em;
+}
+
+.dd-local-badge {
+  display: inline-flex;
+  min-height: 30px;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  border: 1px solid rgba(35, 28, 40, 0.1);
+  border-radius: 999px;
+  color: #4a424f;
+  background: rgba(255, 255, 255, 0.62);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.dd-drop-zone {
+  position: relative;
+  overflow: hidden;
+  border-style: solid !important;
+}
+
+.dd-drop-zone::before {
+  position: absolute;
+  inset: 12px;
+  border: 1px dashed rgba(50, 38, 57, 0.2);
+  border-radius: 20px;
+  content: "";
+  pointer-events: none;
+}
+
+.dd-drop-zone:hover {
+  border-color: rgba(56, 40, 66, 0.3) !important;
+  background: rgba(255, 255, 255, 0.93) !important;
+  transform: translateY(-2px);
+}
+
+.dd-drop-zone > * {
+  position: relative;
+  z-index: 1;
+}
+
+.dd-settings-panel {
+  align-self: start;
+}
+
+.dd-app .bg-white {
+  background-color: rgba(255, 255, 255, 0.84);
+}
+
+.dd-app .bg-slate-50 {
+  background-color: rgba(249, 247, 251, 0.62);
+}
+
+.dd-app .bg-slate-100 {
+  background-color: rgba(236, 232, 239, 0.8);
+}
+
+.dd-app .bg-slate-200 {
+  background-color: rgba(211, 205, 216, 0.78);
+}
+
+.dd-app .border-slate-200,
+.dd-app .border-slate-300 {
+  border-color: rgba(38, 30, 43, 0.13);
+}
+
+.dd-app .text-slate-950 {
+  color: var(--dd-ink);
+}
+
+.dd-app .text-slate-700,
+.dd-app .text-slate-600 {
+  color: #554f5a;
+}
+
+.dd-app .text-slate-500 {
+  color: #6d6672;
+}
+
+.dd-app .bg-blue-600 {
+  background-color: var(--dd-dark);
+}
+
+.dd-app .hover\:bg-blue-700:hover {
+  background-color: #050407;
+}
+
+.dd-app .bg-blue-50,
+.dd-app .bg-blue-50\/40 {
+  background-color: rgba(255, 255, 255, 0.56);
+}
+
+.dd-app .text-blue-700,
+.dd-app .text-blue-800 {
+  color: #3d3046;
+}
+
+.dd-app .accent-blue-600 {
+  accent-color: var(--dd-dark);
+}
+
+.dd-app input:not([type="checkbox"]),
+.dd-app select {
+  border-color: rgba(38, 30, 43, 0.15);
+  color: var(--dd-ink);
+  background-color: rgba(255, 255, 255, 0.75);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);
+}
+
+.dd-app input:not([type="checkbox"]):focus,
+.dd-app select:focus {
+  border-color: var(--dd-focus);
+  outline: 3px solid rgba(107, 73, 168, 0.17);
+  outline-offset: 1px;
+}
+
+.dd-app button,
+.dd-app a,
+.dd-app select,
+.dd-app input {
+  transition:
+    color 180ms ease,
+    background-color 180ms ease,
+    border-color 180ms ease,
+    opacity 180ms ease,
+    box-shadow 180ms ease,
+    transform 180ms ease;
+}
+
+.dd-app button:active:not(:disabled),
+.dd-app a:active {
+  transform: scale(0.985);
+}
+
+.dd-app :focus-visible {
+  outline: 3px solid rgba(255, 255, 255, 0.88);
+  outline-offset: 3px;
+  box-shadow: 0 0 0 6px rgba(67, 46, 83, 0.25);
+}
+
+.dd-workspace section[aria-labelledby="files-title"] > h2 {
+  color: rgba(255, 255, 255, 0.92);
+  text-shadow: 0 2px 12px rgba(44, 27, 48, 0.22);
+}
+
+.dd-share-ready > h1,
+.dd-share-ready > p {
+  color: #fff;
+  text-shadow: 0 2px 16px rgba(44, 27, 48, 0.22);
+}
+
+.dd-share-ready > span {
+  border-color: rgba(255, 255, 255, 0.4);
+  color: #143e2c;
+  background: rgba(225, 255, 238, 0.75);
+}
+
+.dd-share-ready .rounded-2xl,
+.dd-share-ready .rounded-xl {
+  border-color: rgba(255, 255, 255, 0.58);
+}
+
+.dd-about {
+  padding-top: 4px;
+}
+
+.dd-alert {
+  border-color: rgba(142, 38, 51, 0.22) !important;
+  background: rgba(255, 235, 236, 0.9) !important;
+  box-shadow: 0 18px 44px rgba(83, 30, 42, 0.16);
+  backdrop-filter: blur(20px);
+}
+
+.dd-dialog-backdrop {
+  background: rgba(18, 12, 22, 0.56);
+  backdrop-filter: blur(12px);
+  animation: dd-backdrop-in 180ms ease-out both;
+}
+
+.dd-dialog {
+  background: var(--dd-surface-strong) !important;
+  animation: dd-dialog-in 260ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes dd-state-enter {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes dd-backdrop-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes dd-dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.975);
+  }
+}
+
+@media (max-height: 720px) {
+  .dd-stage {
+    min-height: 250px;
+    padding-top: 20px;
+  }
+
+  .dd-stage-title {
+    font-size: clamp(4rem, 10vw, 6rem);
+  }
+}
+
+@media (max-width: 760px) {
+  .dd-stage {
+    min-height: 270px;
+  }
+
+  .dd-state-rail li {
+    padding-inline: 9px;
+  }
+
+  .dd-state-rail li span {
+    display: none;
+  }
+
+  .dd-workspace-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
+    scroll-behavior: auto !important;
     transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
+  }
+
+  .dd-app button:active:not(:disabled),
+  .dd-app a:active,
+  .dd-state-rail li.is-current,
+  .dd-drop-zone:hover {
+    transform: none;
   }
 }

@@ -50,6 +50,7 @@ import {
   type ShareSettings,
 } from "./settings";
 import { SenderTransfer } from "./sender-transfer";
+import { AmbientCanvas } from "./AmbientCanvas";
 import {
   isTauri,
   quitApp,
@@ -57,6 +58,11 @@ import {
   removeLocalFiles,
   setActiveShareCount,
 } from "./tauri";
+import {
+  resolveVisualState,
+  visualStateCopy,
+  type AppVisualState,
+} from "./visual-state";
 
 const apiBase =
   import.meta.env.VITE_PUBLIC_APP_URL ??
@@ -119,6 +125,27 @@ export function App() {
   const completedDownloads = Object.values(transfers).filter(
     (transfer) => transfer.state === "COMPLETED",
   ).length;
+  const visualState = resolveVisualState({
+    tab,
+    fileCount: files.length,
+    hasShare: Boolean(share),
+    online,
+    transferStates: Object.values(transfers).map((transfer) => transfer.state),
+    hasError: Boolean(error),
+  });
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      const reducedMotion = window.matchMedia(
+        "(prefers-reduced-motion: reduce)",
+      ).matches;
+      document.scrollingElement?.scrollTo({
+        top: 0,
+        behavior: reducedMotion ? "auto" : "smooth",
+      });
+    }, 180);
+    return () => window.clearTimeout(timer);
+  }, [visualState]);
 
   useEffect(() => {
     filesRef.current = files;
@@ -476,28 +503,23 @@ export function App() {
   };
 
   return (
-    <div className="min-h-dvh bg-slate-50 text-slate-950">
-      <header className="border-b border-slate-200 bg-white">
+    <div className={`dd-app dd-state-${visualState}`}>
+      <AmbientCanvas state={visualState} />
+      <header className="dd-topbar">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5 lg:px-8">
-          <BrandMark />
+          <BrandMark inverse />
           <nav className="flex items-center gap-1" aria-label="앱 메뉴">
             <Button
               onClick={() => setTab("share")}
-              className={
-                tab === "share"
-                  ? "bg-blue-50 text-blue-800"
-                  : "text-slate-600 hover:bg-slate-100"
-              }
+              aria-current={tab === "share" ? "page" : undefined}
+              className={`dd-nav-button ${tab === "share" ? "is-active" : ""}`}
             >
               <Share2 aria-hidden="true" size={17} /> 공유
             </Button>
             <Button
               onClick={() => setTab("about")}
-              className={
-                tab === "about"
-                  ? "bg-blue-50 text-blue-800"
-                  : "text-slate-600 hover:bg-slate-100"
-              }
+              aria-current={tab === "about" ? "page" : undefined}
+              className={`dd-nav-button ${tab === "about" ? "is-active" : ""}`}
             >
               <Info aria-hidden="true" size={17} /> 정보
             </Button>
@@ -505,7 +527,9 @@ export function App() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-6xl px-5 py-8 lg:px-8">
+      <StateStage state={visualState} />
+
+      <main className="dd-workspace mx-auto max-w-6xl px-5 pb-10 lg:px-8">
         {tab === "about" ? (
           <About
             autoStart={autoStart}
@@ -533,15 +557,19 @@ export function App() {
           />
         ) : (
           <>
-            <div className="mb-8">
-              <h1 className="text-3xl font-bold tracking-[-.03em]">
-                클라우드에 올리지 않고
-                <br />
-                바로 전달하세요.
-              </h1>
-              <p className="mt-3 text-sm leading-6 text-slate-600">
-                원본 파일은 현재 위치에 그대로 유지됩니다.
-              </p>
+            <div className="dd-workspace-heading mb-5 flex items-end justify-between gap-4">
+              <div>
+                <p className="dd-kicker">NEW DIRECT SHARE</p>
+                <h1 className="mt-1 text-xl font-bold tracking-[-.03em]">
+                  클라우드에 올리지 않고 바로 전달하세요.
+                </h1>
+                <p className="mt-1.5 text-sm text-slate-600">
+                  원본 파일은 현재 위치에 그대로 유지됩니다.
+                </p>
+              </div>
+              <span className="dd-local-badge shrink-0">
+                <CloudOff aria-hidden="true" size={14} /> LOCAL ONLY
+              </span>
             </div>
             <div className="grid gap-6 lg:grid-cols-[1.1fr_.9fr]">
               <section aria-labelledby="files-title">
@@ -551,7 +579,7 @@ export function App() {
                 {!files.length ? (
                   <button
                     onClick={() => void selectFiles()}
-                    className="flex min-h-[330px] w-full cursor-pointer flex-col items-center justify-center rounded-3xl border-2 border-dashed border-slate-300 bg-white p-8 text-center transition-colors hover:border-blue-500 hover:bg-blue-50/40 focus-visible:ring-3 focus-visible:ring-blue-500/35"
+                    className="dd-drop-zone flex min-h-[330px] w-full cursor-pointer flex-col items-center justify-center rounded-3xl border-2 border-dashed border-slate-300 bg-white p-8 text-center transition-colors hover:border-blue-500 hover:bg-blue-50/40 focus-visible:ring-3 focus-visible:ring-blue-500/35"
                   >
                     <span className="grid size-14 place-items-center rounded-2xl bg-blue-50 text-blue-700">
                       <UploadCloud aria-hidden="true" size={27} />
@@ -576,7 +604,7 @@ export function App() {
                     </span>
                   </button>
                 ) : (
-                  <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+                  <div className="dd-panel overflow-hidden rounded-2xl border border-slate-200 bg-white">
                     <ul className="divide-y divide-slate-200">
                       {files.map((file) => (
                         <li
@@ -637,7 +665,7 @@ export function App() {
         {error && (
           <div
             role="alert"
-            className="mt-5 flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-900"
+            className="dd-alert mt-5 flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-900"
           >
             <AlertTriangle
               aria-hidden="true"
@@ -675,6 +703,45 @@ export function App() {
   );
 }
 
+function StateStage({ state }: { state: AppVisualState }) {
+  const copy = visualStateCopy[state];
+  const steps = [
+    { label: "Select", icon: FilePlus2 },
+    { label: "Ready", icon: Settings2 },
+    { label: "Share", icon: Radio },
+    { label: "Transfer", icon: Share2 },
+  ];
+
+  return (
+    <section className="dd-stage" aria-live="polite" aria-atomic="true">
+      <p className="dd-stage-kicker">
+        <span aria-hidden="true" /> P2P · NO CLOUD
+      </p>
+      <div className="dd-stage-copy" key={state}>
+        <div className="dd-stage-title">{copy.label}</div>
+        <p>{copy.description}</p>
+      </div>
+      <ol className="dd-state-rail" aria-label="공유 진행 상태">
+        {steps.map((step, index) => {
+          const Icon = step.icon;
+          const current = index === copy.step;
+          return (
+            <li
+              key={step.label}
+              className={current ? "is-current" : ""}
+              data-complete={index < copy.step || undefined}
+              aria-current={current ? "step" : undefined}
+            >
+              <Icon aria-hidden="true" size={14} />
+              <span>{step.label}</span>
+            </li>
+          );
+        })}
+      </ol>
+    </section>
+  );
+}
+
 function SettingsPanel({
   settings,
   onChange,
@@ -698,7 +765,7 @@ function SettingsPanel({
   return (
     <section
       aria-labelledby="settings-title"
-      className="rounded-2xl border border-slate-200 bg-white p-5"
+      className="dd-panel dd-settings-panel rounded-2xl border border-slate-200 bg-white p-5"
     >
       <div className="flex items-center gap-2">
         <Settings2 aria-hidden="true" size={19} />
@@ -921,7 +988,7 @@ function ShareReady({
   }, [share.expiresAt]);
 
   return (
-    <div className="mx-auto max-w-4xl">
+    <div className="dd-share-ready mx-auto max-w-4xl">
       <StatusPill tone={online ? "success" : "warning"}>
         <Radio aria-hidden="true" size={13} /> {online ? "온라인" : "연결 중"}
       </StatusPill>
@@ -1050,11 +1117,11 @@ function About({
   onNotificationsEnabled: (enabled: boolean) => void;
 }) {
   return (
-    <div className="mx-auto max-w-2xl">
-      <div className="rounded-2xl border border-slate-200 bg-white p-7">
+    <div className="dd-about mx-auto max-w-2xl">
+      <div className="dd-panel rounded-2xl border border-slate-200 bg-white p-7">
         <BrandMark />
         <h1 className="mt-6 text-2xl font-bold">DirectDrop</h1>
-        <p className="mt-1 text-sm text-slate-500">Version 0.1.0</p>
+        <p className="mt-1 text-sm text-slate-500">Version 0.1.1</p>
         <p className="mt-5 text-sm leading-6 text-slate-600">
           Direct files. No cloud. 파일은 서버에 저장되지 않으며 WebRTC P2P로
           직접 전송됩니다.
@@ -1126,12 +1193,12 @@ function ApprovalDialog({
 }) {
   return (
     <div
-      className="fixed inset-0 z-50 grid place-items-center bg-slate-950/50 p-5"
+      className="dd-dialog-backdrop fixed inset-0 z-50 grid place-items-center bg-slate-950/50 p-5"
       role="dialog"
       aria-modal="true"
       aria-labelledby="approval-title"
     >
-      <div className="w-full max-w-md rounded-2xl bg-white p-6">
+      <div className="dd-dialog w-full max-w-md rounded-2xl bg-white p-6">
         <ShieldCheck className="text-blue-700" aria-hidden="true" />
         <h2 id="approval-title" className="mt-4 text-xl font-bold">
           새 다운로드 요청
@@ -1170,12 +1237,12 @@ function QrDialog({
 }) {
   return (
     <div
-      className="fixed inset-0 z-50 grid place-items-center bg-slate-950/50 p-5"
+      className="dd-dialog-backdrop fixed inset-0 z-50 grid place-items-center bg-slate-950/50 p-5"
       role="dialog"
       aria-modal="true"
       aria-label="QR 코드 크게 보기"
     >
-      <div className="relative w-full max-w-lg rounded-2xl bg-white p-6">
+      <div className="dd-dialog relative w-full max-w-lg rounded-2xl bg-white p-6">
         <button
           onClick={onClose}
           className="absolute right-3 top-3 grid size-11 cursor-pointer place-items-center rounded-xl hover:bg-slate-100"

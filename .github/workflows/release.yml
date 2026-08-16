@@ -49,6 +49,7 @@ jobs:
           releaseName: DirectDrop v__VERSION__
           releaseBody: |
             ## What's New
+            - Animated state-driven desktop interface inspired by kinetic particle systems
             - Direct WebRTC P2P file transfer with no cloud file storage
             - Temporary links, QR sharing, download limits, expiration and password protection
             - Responsive browser receiver and Windows/macOS desktop apps

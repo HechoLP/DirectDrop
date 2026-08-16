@@ -1,6 +1,6 @@
 [package]
 name = "directdrop"
-version = "0.1.0"
+version = "0.1.1"
 description = "Direct P2P file sharing with no cloud file storage"
 authors = ["DirectDrop contributors"]
 license = "MIT"

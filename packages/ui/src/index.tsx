@@ -26,12 +26,26 @@ export function Button({
   );
 }
 
-export function BrandMark({ compact = false }: { compact?: boolean }) {
+export function BrandMark({
+  compact = false,
+  inverse = false,
+}: {
+  compact?: boolean;
+  inverse?: boolean;
+}) {
   return (
-    <span className="inline-flex items-center gap-2 font-bold tracking-tight text-slate-950">
+    <span
+      className={cx(
+        "inline-flex items-center gap-2 font-bold tracking-tight",
+        inverse ? "text-white" : "text-slate-950",
+      )}
+    >
       <span
         aria-hidden="true"
-        className="grid size-8 place-items-center rounded-[10px] bg-blue-600 text-sm text-white"
+        className={cx(
+          "grid size-8 place-items-center rounded-[10px] text-sm",
+          inverse ? "bg-white text-slate-950" : "bg-blue-600 text-white",
+        )}
       >
         D
       </span>
