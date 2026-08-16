@@ -17,6 +17,7 @@ import {
   Download,
   FilePlus2,
   Files,
+  Globe2,
   Info,
   Link2,
   LoaderCircle,
@@ -29,6 +30,7 @@ import {
   Square,
   Trash2,
   UploadCloud,
+  Zap,
   X,
 } from "lucide-react";
 import QRCode from "qrcode";
@@ -51,6 +53,8 @@ import {
 } from "./settings";
 import { scheduleShareExpiration } from "./share-expiration";
 import { SenderTransfer } from "./sender-transfer";
+import { LanShareWorkspace } from "./LanShareWorkspace";
+import { productModes, type ProductMode } from "./product-mode";
 import {
   isTauri,
   quitApp,
@@ -100,11 +104,13 @@ function isTurnServer(server: RTCIceServer) {
 
 export function App() {
   const [files, setFiles] = useState<PublicFile[]>([]);
+  const [lanFiles, setLanFiles] = useState<PublicFile[]>([]);
   const [settings, setSettings] = useState<ShareSettings>(defaultSettings);
   const [share, setShare] = useState<CreatedShare>();
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string>();
   const [online, setOnline] = useState(false);
+  const [productMode, setProductMode] = useState<ProductMode>("directdrop");
   const [tab, setTab] = useState<"share" | "about">("share");
   const [shareView, setShareView] = useState<"upload" | "list">("upload");
   const [showQr, setShowQr] = useState(false);
@@ -112,11 +118,13 @@ export function App() {
   const [transfers, setTransfers] = useState<Record<string, TransferRow>>({});
   const [autoStart, setAutoStart] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+  const [lanError, setLanError] = useState<string>();
   const socketRef = useRef<WebSocket | null>(null);
   const transferRef = useRef(new Map<string, SenderTransfer>());
   const filesRef = useRef(files);
   const settingsRef = useRef(settings);
   const shareRef = useRef(share);
+  const productModeRef = useRef(productMode);
   const notificationsRef = useRef(notificationsEnabled);
 
   const totalSize = useMemo(
@@ -126,14 +134,19 @@ export function App() {
   const completedDownloads = Object.values(transfers).filter(
     (transfer) => transfer.state === "COMPLETED",
   ).length;
-  const visualState = resolveVisualState({
-    tab,
-    fileCount: shareView === "upload" && !share ? files.length : 0,
-    hasShare: shareView === "list" && Boolean(share),
-    online,
-    transferStates: Object.values(transfers).map((transfer) => transfer.state),
-    hasError: Boolean(error),
-  });
+  const visualState =
+    productMode === "directdrop" || tab === "about"
+      ? resolveVisualState({
+          tab,
+          fileCount: shareView === "upload" && !share ? files.length : 0,
+          hasShare: shareView === "list" && Boolean(share),
+          online,
+          transferStates: Object.values(transfers).map(
+            (transfer) => transfer.state,
+          ),
+          hasError: Boolean(error),
+        })
+      : "select";
 
   useEffect(() => {
     filesRef.current = files;
@@ -144,6 +157,9 @@ export function App() {
   useEffect(() => {
     shareRef.current = share;
   }, [share]);
+  useEffect(() => {
+    productModeRef.current = productMode;
+  }, [productMode]);
   useEffect(() => {
     notificationsRef.current = notificationsEnabled;
   }, [notificationsEnabled]);
@@ -158,7 +174,7 @@ export function App() {
       socket.send(JSON.stringify(message));
   }, []);
 
-  const addPaths = useCallback(async (paths: string[]) => {
+  const addSharePaths = useCallback(async (paths: string[]) => {
     if (!paths.length) return;
     if (shareRef.current) {
       setError("현재 공유를 종료한 뒤 새 파일을 선택해 주세요.");
@@ -179,6 +195,19 @@ export function App() {
       setError(undefined);
     } catch (pathError) {
       setError(
+        pathError instanceof Error ? pathError.message : String(pathError),
+      );
+    }
+  }, []);
+
+  const addLanPaths = useCallback(async (paths: string[]) => {
+    if (!paths.length) return;
+    try {
+      const registered = await registerFiles(paths);
+      setLanFiles((current) => [...current, ...registered]);
+      setLanError(undefined);
+    } catch (pathError) {
+      setLanError(
         pathError instanceof Error ? pathError.message : String(pathError),
       );
     }
@@ -220,7 +249,10 @@ export function App() {
     const cleanups: Array<() => void> = [];
     void getCurrentWebview()
       .onDragDropEvent((event) => {
-        if (event.payload.type === "drop") void addPaths(event.payload.paths);
+        if (event.payload.type !== "drop") return;
+        if (productModeRef.current === "lan-share")
+          void addLanPaths(event.payload.paths);
+        else void addSharePaths(event.payload.paths);
       })
       .then((unlisten) => {
         if (disposed) unlisten();
@@ -247,7 +279,7 @@ export function App() {
       disposed = true;
       cleanups.forEach((cleanup) => cleanup());
     };
-  }, [addPaths, stopShare]);
+  }, [addLanPaths, addSharePaths, stopShare]);
 
   useEffect(() => {
     if (isTauri()) void setActiveShareCount(share ? 1 : 0);
@@ -260,7 +292,17 @@ export function App() {
     }
     const selected = await open({ multiple: true, directory: false });
     if (selected)
-      await addPaths(Array.isArray(selected) ? selected : [selected]);
+      await addSharePaths(Array.isArray(selected) ? selected : [selected]);
+  };
+
+  const selectLanFiles = async () => {
+    if (!isTauri()) {
+      setLanError("파일 선택은 DirectDrop 데스크톱 앱에서 사용할 수 있습니다.");
+      return;
+    }
+    const selected = await open({ multiple: true, directory: false });
+    if (selected)
+      await addLanPaths(Array.isArray(selected) ? selected : [selected]);
   };
 
   const startNewShare = async () => {
@@ -286,7 +328,7 @@ export function App() {
     await stopShare();
     setTab("share");
     setShareView("upload");
-    await addPaths(paths);
+    await addSharePaths(paths);
   };
 
   const removeFile = async (file: PublicFile) => {
@@ -296,6 +338,11 @@ export function App() {
       filesRef.current = nextFiles;
       return nextFiles;
     });
+  };
+
+  const removeLanFile = async (file: PublicFile) => {
+    await removeLocalFiles([file.id]);
+    setLanFiles((current) => current.filter((item) => item.id !== file.id));
   };
 
   const startTransfer = useCallback(
@@ -530,32 +577,41 @@ export function App() {
     <div className={`dd-app dd-state-${visualState}`}>
       <header className="dd-topbar">
         <div className="dd-topbar-inner mx-auto flex h-16 max-w-5xl items-center justify-between px-5 lg:px-8">
-          <BrandMark />
+          <div className="dd-topbar-brand">
+            <BrandMark />
+          </div>
           <nav className="dd-nav flex items-center" aria-label="앱 메뉴">
             <Button
               onClick={() => {
                 setTab("share");
-                setShareView("upload");
+                setProductMode("directdrop");
               }}
               aria-current={
-                tab === "share" && shareView === "upload" ? "page" : undefined
+                tab === "share" && productMode === "directdrop"
+                  ? "page"
+                  : undefined
               }
-              className={`dd-nav-button ${tab === "share" && shareView === "upload" ? "is-active" : ""}`}
+              className={`dd-nav-button ${tab === "share" && productMode === "directdrop" ? "is-active" : ""}`}
             >
-              <UploadCloud aria-hidden="true" size={17} /> 업로드
+              <Globe2 aria-hidden="true" size={17} /> DirectDrop
+              {share && <span className="dd-nav-count">1</span>}
             </Button>
             <Button
               onClick={() => {
                 setTab("share");
-                setShareView("list");
+                setProductMode("lan-share");
               }}
               aria-current={
-                tab === "share" && shareView === "list" ? "page" : undefined
+                tab === "share" && productMode === "lan-share"
+                  ? "page"
+                  : undefined
               }
-              className={`dd-nav-button ${tab === "share" && shareView === "list" ? "is-active" : ""}`}
+              className={`dd-nav-button ${tab === "share" && productMode === "lan-share" ? "is-active" : ""}`}
             >
-              <Link2 aria-hidden="true" size={17} /> 공유 목록
-              {share && <span className="dd-nav-count">1</span>}
+              <Zap aria-hidden="true" size={17} /> LAN Share
+              {lanFiles.length > 0 && (
+                <span className="dd-nav-count">{lanFiles.length}</span>
+              )}
             </Button>
             <Button
               onClick={() => setTab("about")}
@@ -580,8 +636,42 @@ export function App() {
               setAutoStart(enabled);
             }}
           />
+        ) : productMode === "lan-share" ? (
+          <LanShareWorkspace
+            files={lanFiles}
+            onSelectFiles={() => void selectLanFiles()}
+            onRemoveFile={(file) => void removeLanFile(file)}
+          />
         ) : (
           <div className="dd-share-screen">
+            <div className="dd-category-toolbar">
+              <div className="dd-category-title">
+                <span className="dd-category-icon">
+                  <Globe2 aria-hidden="true" size={19} />
+                </span>
+                <span>
+                  <strong>{productModes.directdrop.label}</strong>
+                  <small>{productModes.directdrop.description}</small>
+                </span>
+              </div>
+              <nav className="dd-view-nav" aria-label="DirectDrop 보기">
+                <Button
+                  onClick={() => setShareView("upload")}
+                  aria-current={shareView === "upload" ? "page" : undefined}
+                  className={shareView === "upload" ? "is-active" : ""}
+                >
+                  <UploadCloud aria-hidden="true" size={16} /> 파일 업로드
+                </Button>
+                <Button
+                  onClick={() => setShareView("list")}
+                  aria-current={shareView === "list" ? "page" : undefined}
+                  className={shareView === "list" ? "is-active" : ""}
+                >
+                  <Link2 aria-hidden="true" size={16} /> 공유 목록
+                  {share && <span className="dd-nav-count">1</span>}
+                </Button>
+              </nav>
+            </div>
             <StateHeader
               state={visualState}
               view={shareView}
@@ -717,7 +807,8 @@ export function App() {
             )}
           </div>
         )}
-        {error && (
+        {((productMode === "directdrop" && error) ||
+          (productMode === "lan-share" && lanError)) && (
           <div
             role="alert"
             className="dd-alert mt-5 flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-900"
@@ -727,7 +818,7 @@ export function App() {
               className="mt-0.5 shrink-0"
               size={18}
             />
-            {error}
+            {productMode === "directdrop" ? error : lanError}
           </div>
         )}
       </main>
