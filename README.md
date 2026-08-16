@@ -1,5 +1,7 @@
 # DirectDrop
 
+[한국어](README.md) | [English](README.en.md)
+
 **Direct files. No cloud.**
 
 DirectDrop은 클라우드에 파일을 올리지 않고, 내 컴퓨터에서 상대방에게 직접 파일을 전송하는 P2P 파일 공유 프로그램입니다. 데스크톱 앱이 임시 링크와 QR 코드를 만들고, 수신자는 프로그램 설치 없이 브라우저에서 파일을 저장합니다.
@@ -17,7 +19,7 @@ DirectDrop은 클라우드에 파일을 올리지 않고, 내 컴퓨터에서 �
 
 ## 다운로드
 
-[GitHub Releases의 최신 DirectDrop 다운로드](https://github.com/HechoLP/directdrop/releases/latest)
+[share.dlfkd.dev](https://share.dlfkd.dev/)에서 운영 방식과 기기별 다운로드를 확인하거나 [GitHub Releases의 최신 DirectDrop](https://github.com/HechoLP/directdrop/releases/latest)을 직접 받으세요.
 
 Windows 설치 프로그램은 현재 코드 서명되지 않았고 macOS 앱은 ad-hoc 서명 상태라 SmartScreen 또는 Gatekeeper가 경고할 수 있습니다. 릴리스의 `SHA256SUMS.txt`와 저장소 소스를 확인하세요.
 
