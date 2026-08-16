@@ -19,12 +19,13 @@ afterEach(async () => {
   await Promise.all(apps.splice(0).map((app) => app.close()));
 });
 
-async function signalingApp() {
+async function signalingApp(extra: Record<string, string> = {}) {
   const store = new DirectDropStore(":memory:");
   const config = loadConfig({
     NODE_ENV: "test",
     DATABASE_PATH: ":memory:",
     BACKGROUND_CLEANUP_MODE: "off",
+    ...extra,
   });
   const app = await buildApp({ config, store });
   await app.listen({ host: "127.0.0.1", port: 0 });
@@ -155,6 +156,9 @@ describe("WebSocket signaling", () => {
       type: "TRANSFER_COMPLETED",
       sessionId: requested.sessionId,
     });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(store.getShareByToken(share.token)?.completedDownloads).toBe(0);
+    sender.send({ type: "TRANSFER_SENT", sessionId: requested.sessionId });
     const [senderComplete, receiverComplete] = await Promise.all([
       sender.next("TRANSFER_STATE"),
       receiver.next("TRANSFER_STATE"),
@@ -166,6 +170,7 @@ describe("WebSocket signaling", () => {
       type: "TRANSFER_COMPLETED",
       sessionId: requested.sessionId,
     });
+    expect((await receiver.next("ERROR")).code).toBe("INVALID_SESSION_STATE");
     expect(store.getShareByToken(share.token)?.completedDownloads).toBe(1);
     receiver.send({ type: "DOWNLOAD_REQUEST", shareToken: share.token });
     expect((await receiver.next("ERROR")).code).toBe("DOWNLOAD_LIMIT_REACHED");
@@ -200,5 +205,82 @@ describe("WebSocket signaling", () => {
     expect((await sender.next("DOWNLOAD_REQUESTED")).shareToken).toBe(
       share.token,
     );
+  });
+
+  it("expires an abandoned reservation even when background cleanup is off", async () => {
+    const { store, url } = await signalingApp({
+      RESERVATION_TIMEOUT_MS: "25",
+    });
+    const share = createShare(store);
+    const sender = await connect(url);
+    const receiver = await connect(url);
+    await Promise.all([sender.next("CONNECTED"), receiver.next("CONNECTED")]);
+    sender.send({
+      type: "REGISTER_SHARE",
+      shareToken: share.token,
+      controlKey: share.controlKey,
+    });
+    await sender.next("REGISTERED");
+    receiver.send({ type: "JOIN_SHARE", shareToken: share.token });
+    await receiver.next("SHARE_STATE");
+    receiver.send({ type: "DOWNLOAD_REQUEST", shareToken: share.token });
+    await sender.next("DOWNLOAD_REQUESTED");
+    expect((await receiver.next("TRANSFER_STATE")).state).toBe("FAILED");
+
+    receiver.send({ type: "DOWNLOAD_REQUEST", shareToken: share.token });
+    expect((await sender.next("DOWNLOAD_REQUESTED")).shareToken).toBe(
+      share.token,
+    );
+  });
+
+  it("releases a transferring slot when activity stops", async () => {
+    const { store, url } = await signalingApp({
+      RESERVATION_TIMEOUT_MS: "25",
+    });
+    const share = createShare(store);
+    const sender = await connect(url);
+    const receiver = await connect(url);
+    await Promise.all([sender.next("CONNECTED"), receiver.next("CONNECTED")]);
+    sender.send({
+      type: "REGISTER_SHARE",
+      shareToken: share.token,
+      controlKey: share.controlKey,
+    });
+    await sender.next("REGISTERED");
+    receiver.send({ type: "JOIN_SHARE", shareToken: share.token });
+    await receiver.next("SHARE_STATE");
+    receiver.send({ type: "DOWNLOAD_REQUEST", shareToken: share.token });
+    const request = await sender.next("DOWNLOAD_REQUESTED");
+    sender.send({
+      type: "DOWNLOAD_ACCEPT",
+      sessionId: request.sessionId,
+      peerId: request.peerId,
+    });
+    await receiver.next("DOWNLOAD_ACCEPTED");
+    sender.send({ type: "TRANSFER_STARTED", sessionId: request.sessionId });
+    await Promise.all([
+      sender.next("TRANSFER_STATE"),
+      receiver.next("TRANSFER_STATE"),
+    ]);
+    expect((await receiver.next("TRANSFER_STATE")).state).toBe("FAILED");
+    expect(store.getShareByToken(share.token)?.completedDownloads).toBe(0);
+
+    receiver.send({ type: "DOWNLOAD_REQUEST", shareToken: share.token });
+    expect((await sender.next("DOWNLOAD_REQUESTED")).shareToken).toBe(
+      share.token,
+    );
+  });
+
+  it("rejects WebSocket upgrades from an untrusted browser origin", async () => {
+    const { app, url } = await signalingApp();
+    const socket = new WebSocket(url, {
+      origin: "https://attacker.invalid",
+    });
+    const code = await new Promise<number>((resolve, reject) => {
+      socket.once("close", resolve);
+      socket.once("error", reject);
+    });
+    expect(code).toBe(1008);
+    expect(app.directDrop.hub.peers.size).toBe(0);
   });
 });

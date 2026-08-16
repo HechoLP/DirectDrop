@@ -98,12 +98,14 @@ export async function prepareSavePlan(files: PublicFile[]): Promise<SavePlan> {
   if (files.length > 1 && window.showDirectoryPicker) {
     const directory = await window.showDirectoryPicker({ mode: "readwrite" });
     let writable: FileSystemWritableFileStream | undefined;
+    const reservedNames = new Set<string>();
     return {
       mode: "stream",
       async startFile(control) {
-        const handle = await directory.getFileHandle(
-          sanitizeDisplayName(control.name),
-          { create: true },
+        const handle = await createNonOverwritingFileHandle(
+          directory,
+          control.name,
+          reservedNames,
         );
         writable = await handle.createWritable();
       },
@@ -123,6 +125,37 @@ export async function prepareSavePlan(files: PublicFile[]): Promise<SavePlan> {
   }
 
   throw new Error("STREAMING_SAVE_UNSUPPORTED");
+}
+
+export async function createNonOverwritingFileHandle(
+  directory: FileSystemDirectoryHandle,
+  requestedName: string,
+  reservedNames = new Set<string>(),
+): Promise<FileSystemFileHandle> {
+  const safeName = sanitizeDisplayName(requestedName);
+  const extensionIndex = safeName.lastIndexOf(".");
+  const hasExtension = extensionIndex > 0;
+  const stem = hasExtension ? safeName.slice(0, extensionIndex) : safeName;
+  const extension = hasExtension ? safeName.slice(extensionIndex) : "";
+
+  for (let suffix = 0; suffix <= 10_000; suffix += 1) {
+    const candidate =
+      suffix === 0 ? safeName : `${stem} (${suffix})${extension}`;
+    if (reservedNames.has(candidate)) continue;
+    try {
+      await directory.getFileHandle(candidate);
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "NotFoundError") {
+        const handle = await directory.getFileHandle(candidate, {
+          create: true,
+        });
+        reservedNames.add(candidate);
+        return handle;
+      }
+      throw error;
+    }
+  }
+  throw new Error("SAFE_FILENAME_EXHAUSTED");
 }
 
 function createBrowserDownloadPlan(files: PublicFile[]): SavePlan {

@@ -11,7 +11,12 @@ import {
   ShieldCheck,
   WifiOff,
 } from "lucide-react";
-import type { ServerMessage, ShareMetadata } from "@directdrop/protocol";
+import {
+  MAX_PENDING_ICE_CANDIDATES,
+  parseServerMessage,
+  type ServerMessage,
+  type ShareMetadata,
+} from "@directdrop/protocol";
 import {
   formatBytes,
   formatDuration,
@@ -75,6 +80,10 @@ export function ReceiverPage({ token }: { token: string }) {
   const pendingCandidatesRef = useRef<
     Array<{ sessionId: string; candidate: RTCIceCandidateInit }>
   >([]);
+  const connectionTimerRef = useRef<number | undefined>(undefined);
+  const disconnectTimerRef = useRef<number | undefined>(undefined);
+  const phaseRef = useRef<Phase>(phase);
+  const requestInFlightRef = useRef(false);
 
   const send = useCallback((message: object) => {
     const socket = socketRef.current;
@@ -84,8 +93,23 @@ export function ReceiverPage({ token }: { token: string }) {
 
   const fail = useCallback(
     (message: string) => {
+      if (phaseRef.current === "complete" || phaseRef.current === "error")
+        return;
+      if (connectionTimerRef.current)
+        window.clearTimeout(connectionTimerRef.current);
+      if (disconnectTimerRef.current)
+        window.clearTimeout(disconnectTimerRef.current);
+      connectionTimerRef.current = undefined;
+      disconnectTimerRef.current = undefined;
+      peerRef.current?.close();
+      const savePlan = savePlanRef.current;
+      savePlanRef.current = null;
+      if (savePlan)
+        void savePlan.abort(new Error(message)).catch(() => undefined);
       setError(message);
       setPhase("error");
+      phaseRef.current = "error";
+      requestInFlightRef.current = false;
       if (sessionRef.current)
         send({
           type: "TRANSFER_FAILED",
@@ -102,6 +126,9 @@ export function ReceiverPage({ token }: { token: string }) {
   useEffect(() => {
     runtimeRef.current = runtime;
   }, [runtime]);
+  useEffect(() => {
+    phaseRef.current = phase;
+  }, [phase]);
 
   const createPeer = useCallback(
     async (offer: Extract<ServerMessage, { type: "OFFER" }>) => {
@@ -115,6 +142,12 @@ export function ReceiverPage({ token }: { token: string }) {
         : currentRuntime.iceServers.filter((server) => !isTurnServer(server));
       const peer = new RTCPeerConnection({ iceServers });
       peerRef.current = peer;
+      if (connectionTimerRef.current)
+        window.clearTimeout(connectionTimerRef.current);
+      connectionTimerRef.current = window.setTimeout(
+        () => fail("P2P 연결 시간이 초과되었습니다. 다시 시도해 주세요."),
+        45_000,
+      );
       senderPeerRef.current = offer.peerId;
       sessionRef.current = offer.sessionId;
       peer.onicecandidate = (event) => {
@@ -127,14 +160,26 @@ export function ReceiverPage({ token }: { token: string }) {
           });
       };
       peer.onconnectionstatechange = () => {
-        if (
-          peer.connectionState === "failed" ||
-          peer.connectionState === "disconnected"
-        )
+        if (peer.connectionState === "failed")
           fail(
             "P2P 연결이 끊겼습니다. 네트워크를 확인하고 다시 시도해 주세요.",
           );
+        else if (peer.connectionState === "disconnected") {
+          if (!disconnectTimerRef.current)
+            disconnectTimerRef.current = window.setTimeout(
+              () =>
+                fail(
+                  "P2P 연결이 끊겼습니다. 네트워크를 확인하고 다시 시도해 주세요.",
+                ),
+              10_000,
+            );
+        }
         if (peer.connectionState === "connected") {
+          if (disconnectTimerRef.current)
+            window.clearTimeout(disconnectTimerRef.current);
+          disconnectTimerRef.current = undefined;
+          if (connectionTimerRef.current)
+            window.clearTimeout(connectionTimerRef.current);
           const selected = peer.getStats().then((stats) => {
             let pair:
               | (RTCStats & {
@@ -168,22 +213,34 @@ export function ReceiverPage({ token }: { token: string }) {
                 : "Direct P2P",
             );
           });
-          void selected;
+          void selected.catch(() => setConnectionType("연결됨"));
         }
       };
       peer.ondatachannel = (event) => {
+        if (connectionTimerRef.current)
+          window.clearTimeout(connectionTimerRef.current);
         setPhase("transferring");
-        send({ type: "TRANSFER_STARTED", sessionId: offer.sessionId });
+        phaseRef.current = "transferring";
         attachReceiverChannel({
           channel: event.channel,
           files: currentMetadata.files,
           savePlan: savePlanRef.current!,
           onProgress: setProgress,
           onComplete: () => {
+            savePlanRef.current = null;
+            if (disconnectTimerRef.current)
+              window.clearTimeout(disconnectTimerRef.current);
+            disconnectTimerRef.current = undefined;
             setPhase("complete");
+            phaseRef.current = "complete";
+            requestInFlightRef.current = false;
             send({ type: "TRANSFER_COMPLETED", sessionId: offer.sessionId });
+            peer.close();
           },
-          onError: (transferError) => fail(transferError.message),
+          onError: (transferError) => {
+            savePlanRef.current = null;
+            fail(transferError.message);
+          },
         });
       };
       await peer.setRemoteDescription({ type: "offer", sdp: offer.sdp });
@@ -238,7 +295,14 @@ export function ReceiverPage({ token }: { token: string }) {
     socketRef.current = socket;
     socket.onopen = () => send({ type: "JOIN_SHARE", shareToken: token });
     socket.onmessage = (event) => {
-      const message = JSON.parse(event.data as string) as ServerMessage;
+      let message: ServerMessage;
+      try {
+        message = parseServerMessage(JSON.parse(event.data as string));
+      } catch {
+        fail("서버에서 올바르지 않은 응답을 받았습니다.");
+        socket.close(1002, "invalid server message");
+        return;
+      }
       if (message.type === "SHARE_STATE") {
         setMetadata((current) => {
           if (
@@ -259,6 +323,7 @@ export function ReceiverPage({ token }: { token: string }) {
         sessionRef.current = message.sessionId;
         senderPeerRef.current = message.peerId;
         setPhase("connecting");
+        phaseRef.current = "connecting";
       } else if (message.type === "DOWNLOAD_REJECTED")
         fail(message.reason ?? "보낸 사람이 다운로드 요청을 거절했습니다.");
       else if (message.type === "OFFER")
@@ -271,7 +336,13 @@ export function ReceiverPage({ token }: { token: string }) {
           peerRef.current?.remoteDescription &&
           sessionRef.current === message.sessionId
         )
-          void peerRef.current.addIceCandidate(candidate);
+          void peerRef.current
+            .addIceCandidate(candidate)
+            .catch(() => fail("ICE 연결 정보를 처리하지 못했습니다."));
+        else if (
+          pendingCandidatesRef.current.length >= MAX_PENDING_ICE_CANDIDATES
+        )
+          fail("ICE 후보가 허용 범위를 초과했습니다.");
         else
           pendingCandidatesRef.current.push({
             sessionId: message.sessionId,
@@ -281,7 +352,16 @@ export function ReceiverPage({ token }: { token: string }) {
     };
     socket.onerror = () =>
       fail("Signaling 서버에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.");
+    socket.onclose = () => {
+      if (["waiting", "connecting", "transferring"].includes(phaseRef.current))
+        fail("Signaling 연결이 끊겼습니다. 다시 시도해 주세요.");
+    };
     return () => {
+      if (connectionTimerRef.current)
+        window.clearTimeout(connectionTimerRef.current);
+      if (disconnectTimerRef.current)
+        window.clearTimeout(disconnectTimerRef.current);
+      socket.onclose = null;
       socket.close();
       peerRef.current?.close();
     };
@@ -302,17 +382,20 @@ export function ReceiverPage({ token }: { token: string }) {
   };
 
   const startDownload = async () => {
-    if (!metadata) return;
+    if (!metadata || requestInFlightRef.current) return;
+    requestInFlightRef.current = true;
     try {
       savePlanRef.current = await prepareSavePlan(metadata.files);
       setError(undefined);
       setPhase("waiting");
+      phaseRef.current = "waiting";
       send({
         type: "DOWNLOAD_REQUEST",
         shareToken: token,
         ...(accessToken ? { accessToken } : {}),
       });
     } catch (saveError) {
+      requestInFlightRef.current = false;
       if (saveError instanceof DOMException && saveError.name === "AbortError")
         return;
       fail(savePreparationErrorMessage(saveError));
@@ -575,18 +658,35 @@ export function ReceiverPage({ token }: { token: string }) {
                 <div className="safe-bottom fixed inset-x-0 bottom-0 z-20 border-t border-slate-200 bg-white/95 p-4 backdrop-blur-sm sm:static sm:border-0 sm:bg-transparent sm:p-0 sm:backdrop-blur-none">
                   <div className="mx-auto max-w-3xl">
                     <Button
-                      onClick={() => void startDownload()}
+                      onClick={() => {
+                        if (phase === "error") window.location.reload();
+                        else void startDownload();
+                      }}
                       disabled={
-                        !metadata.senderOnline ||
-                        terminalState ||
-                        !capability?.canDownload ||
-                        ["waiting", "connecting", "transferring"].includes(
-                          phase,
-                        )
+                        phase !== "error" &&
+                        (!metadata.senderOnline ||
+                          terminalState ||
+                          phase === "complete" ||
+                          !capability?.canDownload ||
+                          ["waiting", "connecting", "transferring"].includes(
+                            phase,
+                          ))
                       }
                       className="w-full bg-blue-600 text-base text-white hover:bg-blue-700"
                     >
-                      <Download aria-hidden="true" size={20} /> 다운로드 시작
+                      {phase === "error" ? (
+                        <>
+                          <LoaderCircle aria-hidden="true" size={20} /> 다시 시도
+                        </>
+                      ) : phase === "complete" ? (
+                        <>
+                          <CheckCircle2 aria-hidden="true" size={20} /> 저장 완료
+                        </>
+                      ) : (
+                        <>
+                          <Download aria-hidden="true" size={20} /> 다운로드 시작
+                        </>
+                      )}
                     </Button>
                   </div>
                 </div>
@@ -596,11 +696,27 @@ export function ReceiverPage({ token }: { token: string }) {
         )}
 
         {!metadata && phase === "error" && (
-          <StateNotice
-            icon={AlertTriangle}
-            title="공유를 열 수 없습니다."
-            body={error ?? "링크를 다시 확인해 주세요."}
-          />
+          <div className="space-y-4">
+            <StateNotice
+              icon={AlertTriangle}
+              title="공유를 열 수 없습니다."
+              body={error ?? "링크를 다시 확인해 주세요."}
+            />
+            <div className="grid grid-cols-2 gap-3">
+              <Button
+                className="border border-slate-200 bg-white text-slate-700"
+                onClick={() => window.location.reload()}
+              >
+                다시 시도
+              </Button>
+              <a
+                className="inline-flex min-h-11 items-center justify-center rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700"
+                href="/"
+              >
+                홈으로
+              </a>
+            </div>
+          </div>
         )}
       </main>
     </div>

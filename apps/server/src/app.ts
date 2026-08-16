@@ -1,19 +1,24 @@
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import Fastify, { type FastifyInstance } from "fastify";
+import Fastify, { LogController, type FastifyInstance } from "fastify";
 import cors from "@fastify/cors";
 import rateLimit from "@fastify/rate-limit";
 import fastifyStatic from "@fastify/static";
 import websocket from "@fastify/websocket";
 import { hash, verify } from "@node-rs/argon2";
-import { createShareSchema, type ShareMetadata } from "@directdrop/protocol";
+import {
+  APP_VERSION,
+  createShareSchema,
+  type ShareMetadata,
+} from "@directdrop/protocol";
 import { loadConfig, type DirectDropConfig } from "./config.js";
 import { SignalingHub } from "./signaling.js";
 import { DirectDropStore, type StoredShare } from "./store.js";
 import { secureToken } from "./token.js";
 
 type AccessGrant = { shareId: string; expiresAt: number };
+const ROUTE_TOKEN_PATTERN = /^[A-Za-z0-9_-]{8,128}$/;
 
 function metadata(
   share: StoredShare,
@@ -53,11 +58,23 @@ export async function buildApp(
   const store = options.store ?? new DirectDropStore(config.databasePath);
   const app = Fastify({
     logger: process.env.NODE_ENV !== "test",
+    logController: new LogController({ disableRequestLogging: true }),
     bodyLimit: 1024 * 1024,
   });
   const grants = new Map<string, AccessGrant>();
+  const grantTimers = new Map<string, NodeJS.Timeout>();
 
   app.addHook("onSend", async (request, reply, payload) => {
+    reply
+      .header("x-content-type-options", "nosniff")
+      .header("referrer-policy", "no-referrer")
+      .header("permissions-policy", "camera=(), microphone=(), geolocation=()")
+      .header("x-frame-options", "DENY")
+      .header("x-robots-tag", "noindex, nofollow, noarchive")
+      .header(
+        "content-security-policy",
+        `default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; img-src 'self' data: blob:; font-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' ${config.publicSignalingUrl}`,
+      );
     if (
       request.url === "/health" ||
       request.url === "/ws" ||
@@ -74,6 +91,9 @@ export async function buildApp(
     const grant = grants.get(token);
     if (!grant || grant.shareId !== shareId || grant.expiresAt <= Date.now()) {
       grants.delete(token);
+      const timer = grantTimers.get(token);
+      if (timer) clearTimeout(timer);
+      grantTimers.delete(token);
       return false;
     }
     return true;
@@ -93,13 +113,14 @@ export async function buildApp(
     app.log,
     validateAccessToken,
     config.presenceTimeoutMs,
+    config.reservationTimeoutMs,
   );
   app.decorate("directDrop", { config, store, hub });
 
   app.get("/health", async () => ({
     ok: true,
     service: "DirectDrop",
-    version: "0.1.0",
+    version: APP_VERSION,
     fileStorage: false,
   }));
 
@@ -149,6 +170,8 @@ export async function buildApp(
     "/api/shares/:token",
     { config: { rateLimit: { max: 90, timeWindow: "1 minute" } } },
     async (request, reply) => {
+      if (!ROUTE_TOKEN_PATTERN.test(request.params.token))
+        return reply.code(404).send({ error: "SHARE_NOT_FOUND" });
       const share = store.getShareByToken(request.params.token);
       if (!share) return reply.code(404).send({ error: "SHARE_NOT_FOUND" });
       const bearer = request.headers.authorization?.replace(/^Bearer\s+/i, "");
@@ -164,11 +187,15 @@ export async function buildApp(
     "/api/shares/:token/verify",
     { config: { rateLimit: { max: 8, timeWindow: "1 minute" } } },
     async (request, reply) => {
+      if (!ROUTE_TOKEN_PATTERN.test(request.params.token))
+        return reply.code(404).send({ error: "SHARE_NOT_FOUND" });
       const share = store.getShareByToken(request.params.token);
       if (!share) return reply.code(404).send({ error: "SHARE_NOT_FOUND" });
       if (!share.passwordHash) return reply.send({ accessToken: null });
       if (
-        !request.body?.password ||
+        typeof request.body?.password !== "string" ||
+        request.body.password.length < 8 ||
+        request.body.password.length > 128 ||
         !(await verify(share.passwordHash, request.body.password))
       )
         return reply.code(401).send({ error: "INVALID_PASSWORD" });
@@ -177,6 +204,12 @@ export async function buildApp(
         shareId: share.id,
         expiresAt: Date.now() + 10 * 60 * 1000,
       });
+      const timer = setTimeout(() => {
+        grants.delete(accessToken);
+        grantTimers.delete(accessToken);
+      }, 10 * 60 * 1000);
+      timer.unref();
+      grantTimers.set(accessToken, timer);
       return { accessToken };
     },
   );
@@ -184,6 +217,8 @@ export async function buildApp(
   app.delete<{ Params: { token: string } }>(
     "/api/shares/:token",
     async (request, reply) => {
+      if (!ROUTE_TOKEN_PATTERN.test(request.params.token))
+        return reply.code(403).send({ error: "SHARE_AUTH_FAILED" });
       const key = request.headers.authorization?.replace(/^Bearer\s+/i, "");
       if (!key || !store.stopShare(request.params.token, key))
         return reply.code(403).send({ error: "SHARE_AUTH_FAILED" });
@@ -197,7 +232,12 @@ export async function buildApp(
       websocket: true,
       config: { rateLimit: { max: 30, timeWindow: "1 minute" } },
     },
-    (socket) => {
+    (socket, request) => {
+      const origin = request.headers.origin;
+      if (origin && !config.allowedOrigins.includes(origin)) {
+        socket.close(1008, "origin not allowed");
+        return;
+      }
       hub.add(socket);
     },
   );
@@ -250,6 +290,9 @@ export async function buildApp(
 
   app.addHook("onClose", async () => {
     if (cleanupTimer) clearInterval(cleanupTimer);
+    grantTimers.forEach((timer) => clearTimeout(timer));
+    grantTimers.clear();
+    grants.clear();
     hub.shutdown();
     store.close();
   });

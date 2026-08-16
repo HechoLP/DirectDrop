@@ -57,6 +57,8 @@ export type StoredDownloadSession = {
   shareId: string;
   receiverPeerId: string;
   state: DownloadSessionState;
+  senderConfirmed: boolean;
+  receiverConfirmed: boolean;
 };
 
 export class DirectDropStore {
@@ -103,11 +105,24 @@ export class DirectDropStore {
         state TEXT NOT NULL CHECK (state IN ('PENDING','RESERVED','CONNECTING','TRANSFERRING','COMPLETED','FAILED','CANCELLED')),
         started_at TEXT NOT NULL,
         completed_at TEXT,
+        sender_confirmed INTEGER NOT NULL DEFAULT 0,
+        receiver_confirmed INTEGER NOT NULL DEFAULT 0,
         updated_at TEXT NOT NULL
       );
       CREATE INDEX IF NOT EXISTS download_sessions_share_state_idx ON download_sessions(share_id, state);
       CREATE INDEX IF NOT EXISTS download_sessions_receiver_idx ON download_sessions(receiver_peer_id, state);
     `);
+    const sessionColumns = this.db.pragma("table_info(download_sessions)") as {
+      name: string;
+    }[];
+    if (!sessionColumns.some((column) => column.name === "sender_confirmed"))
+      this.db.exec(
+        "ALTER TABLE download_sessions ADD COLUMN sender_confirmed INTEGER NOT NULL DEFAULT 0",
+      );
+    if (!sessionColumns.some((column) => column.name === "receiver_confirmed"))
+      this.db.exec(
+        "ALTER TABLE download_sessions ADD COLUMN receiver_confirmed INTEGER NOT NULL DEFAULT 0",
+      );
   }
 
   close() {
@@ -268,6 +283,8 @@ export class DirectDropStore {
         shareId: share.id,
         receiverPeerId,
         state: "RESERVED",
+        senderConfirmed: false,
+        receiverConfirmed: false,
       };
       const now = new Date().toISOString();
       this.db
@@ -286,7 +303,7 @@ export class DirectDropStore {
   getSession(id: string): StoredDownloadSession | null {
     const row = this.db
       .prepare(
-        "SELECT id, share_id, receiver_peer_id, state FROM download_sessions WHERE id = ?",
+        "SELECT id, share_id, receiver_peer_id, state, sender_confirmed, receiver_confirmed FROM download_sessions WHERE id = ?",
       )
       .get(id) as
       | {
@@ -294,6 +311,8 @@ export class DirectDropStore {
           share_id: string;
           receiver_peer_id: string;
           state: DownloadSessionState;
+          sender_confirmed: number;
+          receiver_confirmed: number;
         }
       | undefined;
     return row
@@ -302,6 +321,8 @@ export class DirectDropStore {
           shareId: row.share_id,
           receiverPeerId: row.receiver_peer_id,
           state: row.state,
+          senderConfirmed: Boolean(row.sender_confirmed),
+          receiverConfirmed: Boolean(row.receiver_confirmed),
         }
       : null;
   }
@@ -340,7 +361,12 @@ export class DirectDropStore {
   } {
     const complete = this.db.transaction(() => {
       const session = this.getSession(id);
-      if (!session || session.state !== "TRANSFERRING")
+      if (
+        !session ||
+        session.state !== "TRANSFERRING" ||
+        !session.senderConfirmed ||
+        !session.receiverConfirmed
+      )
         return { changed: false };
       const now = new Date().toISOString();
       const result = this.db
@@ -364,6 +390,54 @@ export class DirectDropStore {
       };
     });
     return complete();
+  }
+
+  markSessionSent(id: string): boolean {
+    const result = this.db
+      .prepare(
+        `
+      UPDATE download_sessions SET sender_confirmed = 1, updated_at = ?
+      WHERE id = ? AND state = 'TRANSFERRING' AND sender_confirmed = 0
+    `,
+      )
+      .run(new Date().toISOString(), id);
+    return result.changes === 1;
+  }
+
+  markSessionReceived(id: string): boolean {
+    const result = this.db
+      .prepare(
+        `
+      UPDATE download_sessions SET receiver_confirmed = 1, updated_at = ?
+      WHERE id = ? AND state = 'TRANSFERRING' AND receiver_confirmed = 0
+    `,
+      )
+      .run(new Date().toISOString(), id);
+    return result.changes === 1;
+  }
+
+  expirePendingSession(id: string): boolean {
+    const result = this.db
+      .prepare(
+        `
+      UPDATE download_sessions SET state = 'FAILED', updated_at = ?
+      WHERE id = ? AND state IN ('PENDING','RESERVED','CONNECTING')
+    `,
+      )
+      .run(new Date().toISOString(), id);
+    return result.changes === 1;
+  }
+
+  expireActiveSession(id: string): boolean {
+    const result = this.db
+      .prepare(
+        `
+      UPDATE download_sessions SET state = 'FAILED', updated_at = ?
+      WHERE id = ? AND state = 'TRANSFERRING'
+    `,
+      )
+      .run(new Date().toISOString(), id);
+    return result.changes === 1;
   }
 
   releaseExpiredReservations(timeoutMs: number): number {

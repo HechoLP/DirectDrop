@@ -22,12 +22,25 @@ export function formatDuration(seconds: number): string {
 }
 
 export function sanitizeDisplayName(name: string): string {
-  return (
-    name
-      .replace(/[\\/\0]/g, "_")
-      .replace(/^\.+$/, "file")
-      .slice(0, 255) || "file"
-  );
+  const cleaned = name
+    .normalize("NFC")
+    .replace(/\p{Cc}/gu, "_")
+    .replace(/[<>:"/\\|?*]/g, "_")
+    .replace(/[\u202a-\u202e\u2066-\u2069]/g, "")
+    .replace(/[. ]+$/g, "")
+    .trim()
+    .slice(0, 255);
+  if (!cleaned || /^\.{1,2}$/.test(cleaned)) return "file";
+  if (/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?$/i.test(cleaned))
+    return `_${cleaned}`;
+  return cleaned;
+}
+
+export async function sha256Hex(data: BufferSource): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", data);
+  return Array.from(new Uint8Array(digest), (byte) =>
+    byte.toString(16).padStart(2, "0"),
+  ).join("");
 }
 
 export type ProgressSnapshot = {

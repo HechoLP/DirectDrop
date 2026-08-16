@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  createNonOverwritingFileHandle,
   detectSaveCapability,
   prepareSavePlan,
   savePreparationErrorMessage,
@@ -74,5 +75,28 @@ describe("receiver save capability", () => {
         new DOMException("blocked", "NotAllowedError"),
       ),
     ).toContain("전용 하위 폴더");
+  });
+
+  it("uses a new safe name instead of overwriting an existing file", async () => {
+    const createdHandle = { createWritable: vi.fn() };
+    const getFileHandle = vi.fn(
+      async (name: string, options?: { create?: boolean }) => {
+        if (name === "report.pdf" && !options?.create)
+          return { createWritable: vi.fn() };
+        if (name === "report (1).pdf" && !options?.create)
+          throw new DOMException("missing", "NotFoundError");
+        if (name === "report (1).pdf" && options?.create)
+          return createdHandle;
+        throw new Error(`unexpected filename: ${name}`);
+      },
+    );
+    const handle = await createNonOverwritingFileHandle(
+      { getFileHandle } as unknown as FileSystemDirectoryHandle,
+      "report.pdf",
+    );
+    expect(handle).toBe(createdHandle);
+    expect(getFileHandle).toHaveBeenLastCalledWith("report (1).pdf", {
+      create: true,
+    });
   });
 });

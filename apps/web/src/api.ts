@@ -1,4 +1,9 @@
-import { shareMetadataSchema, type ShareMetadata } from "@directdrop/protocol";
+import {
+  passwordVerificationResponseSchema,
+  publicRuntimeConfigSchema,
+  shareMetadataSchema,
+  type ShareMetadata,
+} from "@directdrop/protocol";
 
 export type PublicRuntimeConfig = {
   appUrl: string;
@@ -18,9 +23,8 @@ async function checkedFetch(input: RequestInfo | URL, init?: RequestInit) {
 }
 
 export async function getRuntimeConfig(): Promise<PublicRuntimeConfig> {
-  return (
-    await checkedFetch("/api/config")
-  ).json() as Promise<PublicRuntimeConfig>;
+  const response = await checkedFetch("/api/config");
+  return publicRuntimeConfigSchema.parse(await response.json());
 }
 
 export async function getShare(
@@ -50,6 +54,8 @@ export async function verifySharePassword(
       body: JSON.stringify({ password }),
     },
   );
-  const result = (await response.json()) as { accessToken: string | null };
+  const result = passwordVerificationResponseSchema.parse(
+    await response.json(),
+  );
   return result.accessToken ?? undefined;
 }

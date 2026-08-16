@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
+import { APP_VERSION } from "@directdrop/protocol";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { DirectDropStore } from "../src/store.js";
@@ -32,9 +33,18 @@ describe("DirectDrop API", () => {
     expect(response.json()).toMatchObject({
       ok: true,
       service: "DirectDrop",
+      version: APP_VERSION,
       fileStorage: false,
     });
     expect(response.headers["cache-control"]).toBe("no-store");
+    expect(response.headers["x-content-type-options"]).toBe("nosniff");
+    expect(response.headers["x-frame-options"]).toBe("DENY");
+    expect(response.headers["x-robots-tag"]).toBe(
+      "noindex, nofollow, noarchive",
+    );
+    expect(response.headers["content-security-policy"]).toContain(
+      "default-src 'self'",
+    );
   });
 
   it("prevents stale HTML and missing-resource responses from being cached", async () => {
@@ -142,5 +152,15 @@ describe("DirectDrop API", () => {
   it("does not start a cleanup loop when mode is off", async () => {
     const app = await testApp({ BACKGROUND_CLEANUP_MODE: "off" });
     expect(app.directDrop.config.cleanupMode).toBe("off");
+  });
+
+  it("rejects malformed route tokens before share lookup", async () => {
+    const app = await testApp();
+    const lookup = await app.inject({
+      method: "GET",
+      url: "/api/shares/not%21valid",
+    });
+    expect(lookup.statusCode).toBe(404);
+    expect(lookup.json()).toEqual({ error: "SHARE_NOT_FOUND" });
   });
 });

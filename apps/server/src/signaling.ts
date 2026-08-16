@@ -15,6 +15,7 @@ type Peer = {
   joinedShares: Set<string>;
   registeredShares: Set<string>;
   downloadRequestTimes: number[];
+  messageTimes: number[];
 };
 
 export class SignalingHub {
@@ -23,6 +24,7 @@ export class SignalingHub {
   private shuttingDown = false;
   private readonly lastSeen = new Map<string, number>();
   private readonly presenceTimers = new Map<string, NodeJS.Timeout>();
+  private readonly reservationTimers = new Map<string, NodeJS.Timeout>();
 
   constructor(
     private readonly store: DirectDropStore,
@@ -32,6 +34,7 @@ export class SignalingHub {
       token: string | undefined,
     ) => boolean,
     private readonly presenceTimeoutMs: number,
+    private readonly reservationTimeoutMs: number,
   ) {}
 
   add(socket: WebSocket) {
@@ -41,11 +44,24 @@ export class SignalingHub {
       joinedShares: new Set(),
       registeredShares: new Set(),
       downloadRequestTimes: [],
+      messageTimes: [],
     };
     this.peers.set(peer.id, peer);
     this.send(peer, { type: "CONNECTED", peerId: peer.id });
 
     socket.on("message", (raw, isBinary) => {
+      const cutoff = Date.now() - 60_000;
+      peer.messageTimes = peer.messageTimes.filter((time) => time > cutoff);
+      if (peer.messageTimes.length >= 300) {
+        this.sendError(
+          peer,
+          "MESSAGE_RATE_LIMITED",
+          "Signaling 메시지가 너무 많습니다.",
+        );
+        socket.close(1008, "message rate limit");
+        return;
+      }
+      peer.messageTimes.push(Date.now());
       if (isBinary) {
         this.sendError(
           peer,
@@ -59,7 +75,14 @@ export class SignalingHub {
         const message = parseClientMessage(parsed);
         this.handle(peer, message);
       } catch (error) {
-        this.log.warn({ peerId: peer.id, error }, "invalid signaling message");
+        this.log.warn(
+          {
+            peerId: peer.id,
+            errorType:
+              error instanceof Error ? error.constructor.name : "UnknownError",
+          },
+          "invalid signaling message",
+        );
         this.sendError(
           peer,
           "INVALID_MESSAGE",
@@ -90,10 +113,12 @@ export class SignalingHub {
     for (const peer of this.peers.values())
       peer.socket.close(1001, "server shutdown");
     for (const timer of this.presenceTimers.values()) clearTimeout(timer);
+    for (const timer of this.reservationTimers.values()) clearTimeout(timer);
     this.peers.clear();
     this.senders.clear();
     this.lastSeen.clear();
     this.presenceTimers.clear();
+    this.reservationTimers.clear();
   }
 
   private touchPresence(token: string) {
@@ -125,6 +150,64 @@ export class SignalingHub {
       code,
       message,
       ...(requestId ? { requestId } : {}),
+    });
+  }
+
+  private scheduleReservationTimeout(sessionId: string) {
+    const previous = this.reservationTimers.get(sessionId);
+    if (previous) clearTimeout(previous);
+    const timer = setTimeout(() => {
+      this.reservationTimers.delete(sessionId);
+      if (this.store.expirePendingSession(sessionId))
+        this.notifyParticipants(sessionId, {
+          type: "TRANSFER_STATE",
+          sessionId,
+          state: "FAILED",
+        });
+    }, this.reservationTimeoutMs);
+    timer.unref();
+    this.reservationTimers.set(sessionId, timer);
+  }
+
+  private scheduleTransferTimeout(sessionId: string) {
+    const previous = this.reservationTimers.get(sessionId);
+    if (previous) clearTimeout(previous);
+    const timer = setTimeout(() => {
+      this.reservationTimers.delete(sessionId);
+      if (this.store.expireActiveSession(sessionId))
+        this.notifyParticipants(sessionId, {
+          type: "TRANSFER_STATE",
+          sessionId,
+          state: "FAILED",
+        });
+    }, this.reservationTimeoutMs);
+    timer.unref();
+    this.reservationTimers.set(sessionId, timer);
+  }
+
+  private clearReservationTimeout(sessionId: string) {
+    const timer = this.reservationTimers.get(sessionId);
+    if (timer) clearTimeout(timer);
+    this.reservationTimers.delete(sessionId);
+  }
+
+  private clearTerminalReservationTimers() {
+    for (const sessionId of this.reservationTimers.keys()) {
+      const state = this.store.getSession(sessionId)?.state;
+      if (!state || ["COMPLETED", "FAILED", "CANCELLED"].includes(state))
+        this.clearReservationTimeout(sessionId);
+    }
+  }
+
+  private finishConfirmedSession(sessionId: string) {
+    const completed = this.store.completeSession(sessionId);
+    if (!completed.changed) return;
+    this.clearReservationTimeout(sessionId);
+    this.notifyParticipants(sessionId, {
+      type: "TRANSFER_STATE",
+      sessionId,
+      state: "COMPLETED",
+      completedDownloads: completed.completedDownloads,
     });
   }
 
@@ -182,6 +265,15 @@ export class SignalingHub {
             "SHARE_AUTH_FAILED",
             "공유를 등록할 수 없습니다.",
           );
+        if (
+          !peer.registeredShares.has(share.token) &&
+          peer.registeredShares.size >= 25
+        )
+          return this.sendError(
+            peer,
+            "SHARE_REGISTRATION_LIMIT",
+            "한 연결에서 등록할 수 있는 공유 수를 초과했습니다.",
+          );
         const existing = this.senders.get(share.token);
         if (existing && existing !== peer.id)
           this.peers.get(existing)?.registeredShares.delete(share.token);
@@ -204,6 +296,7 @@ export class SignalingHub {
             "공유를 중지할 권한이 없습니다.",
           );
         this.store.stopShare(message.shareToken, message.controlKey);
+        this.clearTerminalReservationTimers();
         this.senders.delete(message.shareToken);
         this.lastSeen.delete(message.shareToken);
         const presenceTimer = this.presenceTimers.get(message.shareToken);
@@ -220,6 +313,12 @@ export class SignalingHub {
             peer,
             "SHARE_NOT_FOUND",
             "공유를 찾을 수 없습니다.",
+          );
+        if (!peer.joinedShares.has(share.token) && peer.joinedShares.size >= 100)
+          return this.sendError(
+            peer,
+            "JOIN_LIMIT_REACHED",
+            "한 연결에서 참여할 수 있는 공유 수를 초과했습니다.",
           );
         peer.joinedShares.add(message.shareToken);
         this.send(peer, {
@@ -287,6 +386,7 @@ export class SignalingHub {
               ? "다운로드 횟수가 모두 사용되었습니다."
               : "다운로드를 시작할 수 없습니다.",
           );
+        this.scheduleReservationTimeout(reserved.session.id);
         this.send(senderPeer, {
           type: "DOWNLOAD_REQUESTED",
           sessionId: reserved.session.id,
@@ -337,6 +437,7 @@ export class SignalingHub {
             "INVALID_SESSION_STATE",
             "이미 처리된 다운로드 요청입니다.",
           );
+        this.clearReservationTimeout(session.id);
         this.send(this.peers.get(session.receiverPeerId), {
           type: "DOWNLOAD_REJECTED",
           sessionId: session.id,
@@ -388,18 +489,58 @@ export class SignalingHub {
       }
       case "TRANSFER_STARTED": {
         const session = this.store.getSession(message.sessionId);
-        if (!session || !this.isSessionParticipant(peer, session))
+        const share = session ? this.store.getShareById(session.shareId) : null;
+        if (!session || !share || !this.assertSender(peer, share))
           return this.sendError(
             peer,
             "INVALID_SESSION",
-            "세션 참여자만 전송을 시작할 수 있습니다.",
+            "보낸 사람만 전송을 시작할 수 있습니다.",
           );
         if (!this.store.setSessionState(session.id, "TRANSFERRING")) return;
+        this.scheduleTransferTimeout(session.id);
         this.notifyParticipants(session.id, {
           type: "TRANSFER_STATE",
           sessionId: session.id,
           state: "TRANSFERRING",
         });
+        return;
+      }
+      case "TRANSFER_PROGRESS": {
+        const session = this.store.getSession(message.sessionId);
+        const share = session ? this.store.getShareById(session.shareId) : null;
+        if (!session || !share || !this.assertSender(peer, share))
+          return this.sendError(
+            peer,
+            "INVALID_SESSION",
+            "보낸 사람만 전송 활동을 확인할 수 있습니다.",
+          );
+        if (session.state !== "TRANSFERRING")
+          return this.sendError(
+            peer,
+            "INVALID_SESSION_STATE",
+            "전송 활동 상태를 확인할 수 없습니다.",
+          );
+        this.scheduleTransferTimeout(session.id);
+        return;
+      }
+      case "TRANSFER_SENT": {
+        const session = this.store.getSession(message.sessionId);
+        const share = session ? this.store.getShareById(session.shareId) : null;
+        if (!session || !share || !this.assertSender(peer, share))
+          return this.sendError(
+            peer,
+            "INVALID_SESSION",
+            "보낸 사람만 전송 완료를 확인할 수 있습니다.",
+          );
+        if (session.state !== "TRANSFERRING")
+          return this.sendError(
+            peer,
+            "INVALID_SESSION_STATE",
+            "전송 완료 상태를 확인할 수 없습니다.",
+          );
+        this.store.markSessionSent(session.id);
+        this.scheduleTransferTimeout(session.id);
+        this.finishConfirmedSession(session.id);
         return;
       }
       case "TRANSFER_COMPLETED": {
@@ -410,14 +551,15 @@ export class SignalingHub {
             "INVALID_SESSION",
             "수신자만 전송 완료를 확정할 수 있습니다.",
           );
-        const completed = this.store.completeSession(session.id);
-        if (completed.changed)
-          this.notifyParticipants(session.id, {
-            type: "TRANSFER_STATE",
-            sessionId: session.id,
-            state: "COMPLETED",
-            completedDownloads: completed.completedDownloads,
-          });
+        if (session.state !== "TRANSFERRING")
+          return this.sendError(
+            peer,
+            "INVALID_SESSION_STATE",
+            "전송 완료 상태를 확인할 수 없습니다.",
+          );
+        this.store.markSessionReceived(session.id);
+        this.scheduleTransferTimeout(session.id);
+        this.finishConfirmedSession(session.id);
         return;
       }
       case "TRANSFER_FAILED":
@@ -432,6 +574,7 @@ export class SignalingHub {
         const state =
           message.type === "TRANSFER_CANCELLED" ? "CANCELLED" : "FAILED";
         if (!this.store.setSessionState(session.id, state)) return;
+        this.clearReservationTimeout(session.id);
         this.notifyParticipants(session.id, {
           type: "TRANSFER_STATE",
           sessionId: session.id,
@@ -455,6 +598,7 @@ export class SignalingHub {
     this.peers.delete(peer.id);
     if (this.shuttingDown) return;
     this.store.failSessionsForPeer(peer.id);
+    this.clearTerminalReservationTimers();
     for (const token of peer.registeredShares) {
       if (this.senders.get(token) === peer.id) this.senders.delete(token);
       this.lastSeen.delete(token);
@@ -469,6 +613,7 @@ export class SignalingHub {
           )
           .run(new Date().toISOString(), share.id);
       if (share) this.store.failSessionsForShare(share.id);
+      this.clearTerminalReservationTimers();
       this.notifyShareState(token);
     }
   }

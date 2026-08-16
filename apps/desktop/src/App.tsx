@@ -44,8 +44,10 @@ import {
 import QRCode from "qrcode";
 import {
   HEARTBEAT_INTERVAL_MS,
+  createdShareResponseSchema,
+  parseServerMessage,
+  publicRuntimeConfigSchema,
   type PublicFile,
-  type ServerMessage,
 } from "@directdrop/protocol";
 import {
   formatBytes,
@@ -127,6 +129,9 @@ export function App() {
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [lanError, setLanError] = useState<string>();
   const socketRef = useRef<WebSocket | null>(null);
+  const reconnectTimerRef = useRef<number | undefined>(undefined);
+  const reconnectAttemptsRef = useRef(0);
+  const connectShareRef = useRef<(share: CreatedShare) => void>(() => {});
   const transferRef = useRef(new Map<string, SenderTransfer>());
   const filesRef = useRef(files);
   const settingsRef = useRef(settings);
@@ -223,7 +228,12 @@ export function App() {
       shareToken: activeShare.token,
       controlKey: activeShare.controlKey,
     });
-    socketRef.current?.close();
+    if (reconnectTimerRef.current)
+      window.clearTimeout(reconnectTimerRef.current);
+    reconnectTimerRef.current = undefined;
+    const activeSocket = socketRef.current;
+    socketRef.current = null;
+    activeSocket?.close();
     transferRef.current.forEach((transfer) => transfer.close());
     transferRef.current.clear();
     shareRef.current = undefined;
@@ -373,60 +383,80 @@ export function App() {
         ...current,
         [request.sessionId]: { state: "CONNECTING", peerId: request.peerId },
       }));
-      const config = (await fetch(`${apiBase}/api/config`).then((response) =>
-        response.json(),
-      )) as { iceServers: RTCIceServer[] };
-      const iceServers = settingsRef.current.allowRelay
-        ? config.iceServers
-        : config.iceServers.filter((server) => !isTurnServer(server));
-      const transfer = new SenderTransfer(
-        request.sessionId,
-        request.peerId,
-        filesRef.current,
-        iceServers,
-        send,
-        (progress) =>
-          setTransfers((current) => ({
-            ...current,
-            [request.sessionId]: {
-              ...current[request.sessionId]!,
-              state: "TRANSFERRING",
-              progress,
-            },
-          })),
-        () =>
-          setTransfers((current) => ({
-            ...current,
-            [request.sessionId]: {
-              ...current[request.sessionId]!,
-              state: "SENT",
-            },
-          })),
-        (transferError) => {
-          setTransfers((current) => ({
-            ...current,
-            [request.sessionId]: {
-              ...current[request.sessionId]!,
-              state: "FAILED",
-            },
-          }));
-          send({
-            type: "TRANSFER_FAILED",
-            sessionId: request.sessionId,
-            reason: transferError.message,
-          });
-          notifyIfEnabled("DirectDrop 전송 실패", transferError.message);
-        },
-      );
-      transferRef.current.set(request.sessionId, transfer);
-      await transfer.createOffer();
+
+      const failTransfer = (failure: unknown) => {
+        const transferError =
+          failure instanceof Error ? failure : new Error(String(failure));
+        transferRef.current.get(request.sessionId)?.close();
+        transferRef.current.delete(request.sessionId);
+        setTransfers((current) => ({
+          ...current,
+          [request.sessionId]: {
+            ...current[request.sessionId]!,
+            state: "FAILED",
+          },
+        }));
+        send({
+          type: "TRANSFER_FAILED",
+          sessionId: request.sessionId,
+          reason: transferError.message,
+        });
+        notifyIfEnabled("DirectDrop 전송 실패", transferError.message);
+      };
+
+      try {
+        const response = await fetch(`${apiBase}/api/config`, {
+          signal: AbortSignal.timeout(10_000),
+        });
+        if (!response.ok) throw new Error("연결 설정을 불러오지 못했습니다.");
+        const config = publicRuntimeConfigSchema.parse(await response.json());
+        const iceServers = settingsRef.current.allowRelay
+          ? config.iceServers
+          : config.iceServers.filter((server) => !isTurnServer(server));
+        const transfer = new SenderTransfer(
+          request.sessionId,
+          request.peerId,
+          filesRef.current,
+          iceServers,
+          send,
+          (progress) =>
+            setTransfers((current) => ({
+              ...current,
+              [request.sessionId]: {
+                ...current[request.sessionId]!,
+                state: "TRANSFERRING",
+                progress,
+              },
+            })),
+          () =>
+            setTransfers((current) => ({
+              ...current,
+              [request.sessionId]: {
+                ...current[request.sessionId]!,
+                state: "SENT",
+              },
+            })),
+          failTransfer,
+        );
+        transferRef.current.set(request.sessionId, transfer);
+        await transfer.createOffer();
+      } catch (transferError) {
+        failTransfer(transferError);
+      }
     },
     [notifyIfEnabled, send],
   );
 
   const connectShare = useCallback(
     (created: CreatedShare) => {
-      socketRef.current?.close();
+      if (reconnectTimerRef.current)
+        window.clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = undefined;
+      const previousSocket = socketRef.current;
+      if (previousSocket) {
+        previousSocket.onclose = null;
+        previousSocket.close();
+      }
       const socket = new WebSocket(signalingUrl);
       socketRef.current = socket;
       socket.onopen = () => {
@@ -437,12 +467,34 @@ export function App() {
             controlKey: created.controlKey,
           }),
         );
-        setOnline(true);
       };
-      socket.onclose = () => setOnline(false);
+      socket.onclose = () => {
+        if (socketRef.current !== socket) return;
+        setOnline(false);
+        if (shareRef.current?.token !== created.token) return;
+        const attempt = reconnectAttemptsRef.current++;
+        const delay = Math.min(30_000, 1_000 * 2 ** Math.min(attempt, 5));
+        reconnectTimerRef.current = window.setTimeout(() => {
+          reconnectTimerRef.current = undefined;
+          connectShareRef.current(created);
+        }, delay);
+      };
       socket.onerror = () => setError("Signaling 서버 연결에 실패했습니다.");
       socket.onmessage = (event) => {
-        const message = JSON.parse(event.data as string) as ServerMessage;
+        let message;
+        try {
+          message = parseServerMessage(JSON.parse(String(event.data)));
+        } catch {
+          setError("Signaling 서버가 올바르지 않은 응답을 보냈습니다.");
+          socket.close(1002, "invalid server message");
+          return;
+        }
+        if (message.type === "REGISTERED") {
+          reconnectAttemptsRef.current = 0;
+          setOnline(true);
+          setError(undefined);
+          return;
+        }
         if (message.type === "DOWNLOAD_REQUESTED") {
           const request = {
             sessionId: message.sessionId,
@@ -462,27 +514,78 @@ export function App() {
           message.type === "ANSWER" ||
           message.type === "ICE_CANDIDATE"
         ) {
-          void transferRef.current.get(message.sessionId)?.handle(message);
+          const transfer = transferRef.current.get(message.sessionId);
+          if (transfer)
+            void transfer.handle(message).catch((handleError: unknown) => {
+              transfer.close();
+              transferRef.current.delete(message.sessionId);
+              setTransfers((current) => {
+                const existing = current[message.sessionId];
+                if (!existing) return current;
+                return {
+                  ...current,
+                  [message.sessionId]: { ...existing, state: "FAILED" },
+                };
+              });
+              send({
+                type: "TRANSFER_FAILED",
+                sessionId: message.sessionId,
+                reason:
+                  handleError instanceof Error
+                    ? handleError.message
+                    : "WebRTC signaling failed",
+              });
+            });
         } else if (message.type === "TRANSFER_STATE") {
-          if (message.state === "COMPLETED") {
-            setTransfers((current) => ({
-              ...current,
-              [message.sessionId]: {
-                ...current[message.sessionId]!,
-                state: "COMPLETED",
-              },
-            }));
+          if (
+            message.state === "COMPLETED" ||
+            message.state === "FAILED" ||
+            message.state === "CANCELLED"
+          ) {
+            setTransfers((current) => {
+              const existing = current[message.sessionId];
+              if (!existing) return current;
+              return {
+                ...current,
+                [message.sessionId]: {
+                  ...existing,
+                  state:
+                    message.state === "COMPLETED" ? "COMPLETED" : "FAILED",
+                },
+              };
+            });
             transferRef.current.get(message.sessionId)?.close();
             transferRef.current.delete(message.sessionId);
-            notifyIfEnabled(
-              "DirectDrop 전송 완료",
-              "상대방의 저장이 완료되었습니다.",
-            );
+            if (message.state === "COMPLETED")
+              notifyIfEnabled(
+                "DirectDrop 전송 완료",
+                "상대방의 저장이 완료되었습니다.",
+              );
           }
         } else if (message.type === "ERROR") setError(message.message);
       };
     },
-    [notifyIfEnabled, startTransfer],
+    [notifyIfEnabled, send, startTransfer],
+  );
+  useEffect(() => {
+    connectShareRef.current = connectShare;
+  }, [connectShare]);
+
+  useEffect(
+    () => () => {
+      if (reconnectTimerRef.current)
+        window.clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = undefined;
+      const socket = socketRef.current;
+      socketRef.current = null;
+      if (socket) {
+        socket.onclose = null;
+        socket.close();
+      }
+      transferRef.current.forEach((transfer) => transfer.close());
+      transferRef.current.clear();
+    },
+    [],
   );
 
   useEffect(() => {
@@ -535,10 +638,7 @@ export function App() {
         }),
       });
       if (!response.ok) throw new Error("공유를 만들지 못했습니다.");
-      const created = (await response.json()) as Omit<
-        CreatedShare,
-        "qr" | "expiresAt"
-      >;
+      const created = createdShareResponseSchema.parse(await response.json());
       const next = {
         ...created,
         qr: await QRCode.toDataURL(created.url, {
