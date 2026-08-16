@@ -29,7 +29,20 @@ Use the system font stack: SF Pro on macOS, Pretendard or Apple SD Gothic Neo fo
 - Inputs: neutral filled background, no heavy border at rest, blue border and focus halo when focused.
 - Navigation: compact neutral segmented control in a translucent white top bar.
 - Progress: four compact labeled steps. Current state uses blue fill; completed states use a pale blue tint.
+- Active share list: link first, followed by a dense two-column file list with name and size. Keep download count and remaining time in the summary row.
 - Dialogs: white 24px surface over a 42% dark scrim, with a short fade and 8px rise.
+
+## Responsive layout
+
+- Treat the desktop window as a fixed application viewport. At the supported 600×620 minimum, the top bar and current task must fit without page-level scrolling.
+- Use a two-column composition from 561px: file selection on the left and compact settings on the right. Collapse to one column only for browser widths below the native minimum.
+- Use `100dvh`, flex children with `min-height: 0`, and internal overflow only for unbounded file or transfer collections.
+- At short heights, remove secondary descriptions before reducing control size. Interactive targets remain at least 44px.
+
+## Share lifecycle
+
+- A timed share disappears from the active list at the exact local expiration deadline. UI removal happens before network cleanup so the expired state is never left visible.
+- Keep the share URL, every selected file, total size, download count, and remaining time visible in the active-share view.
 
 ## Interaction
 

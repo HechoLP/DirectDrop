@@ -49,9 +49,10 @@ jobs:
           releaseName: DirectDrop v__VERSION__
           releaseBody: |
             ## What's New
-            - Modern, calm desktop interface inspired by Apple and Toss design principles
-            - Clear Korean guidance, compact transfer steps and a focused single-accent system
-            - Improved quick-setting selection, switches, focus feedback and small-window layout
+            - Single-viewport desktop layout that fits the supported 600x620 minimum window without page scrolling
+            - Active-share list showing the share link, every file, file sizes, total size, downloads and remaining time
+            - Shares now disappear immediately at expiration while DirectDrop cleans up the connection and metadata
+            - Modern, calm interface inspired by Apple and Toss design principles
             - Direct WebRTC P2P file transfer with no cloud file storage
             - Temporary links, QR sharing, download limits, expiration and password protection
             - Responsive browser receiver and Windows/macOS desktop apps

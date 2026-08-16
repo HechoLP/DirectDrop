@@ -34,13 +34,14 @@ html,
 body,
 #root {
   min-width: 320px;
+  width: 100%;
   min-height: 100%;
   margin: 0;
 }
 
 body {
-  min-height: 100dvh;
-  overflow-x: hidden;
+  height: 100dvh;
+  overflow: hidden;
   background: var(--dd-background);
 }
 
@@ -63,15 +64,20 @@ input[type="checkbox"] {
 }
 
 .dd-app {
-  min-height: 100dvh;
+  display: flex;
+  width: 100%;
+  height: 100dvh;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
   color: var(--dd-ink);
   background: var(--dd-background);
 }
 
 .dd-topbar {
-  position: sticky;
+  position: relative;
   z-index: 30;
-  top: 0;
+  flex: 0 0 64px;
   border-bottom: 1px solid rgba(0, 27, 55, 0.08);
   background: rgba(255, 255, 255, 0.92);
   -webkit-backdrop-filter: saturate(130%) blur(18px);
@@ -113,15 +119,30 @@ input[type="checkbox"] {
 }
 
 .dd-workspace {
+  display: flex;
+  width: 100%;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  overflow: hidden;
   padding-top: 0;
+  padding-bottom: 16px;
+}
+
+.dd-share-screen {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
 }
 
 .dd-state-header {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  align-items: end;
-  gap: 24px;
-  padding: 52px 0 30px;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 10px 18px;
+  padding: 18px 0 12px;
 }
 
 .dd-state-heading {
@@ -130,7 +151,7 @@ input[type="checkbox"] {
 }
 
 .dd-kicker {
-  margin: 0 0 7px;
+  margin: 0 0 4px;
   color: var(--dd-primary);
   font-size: 11px;
   font-weight: 700;
@@ -140,7 +161,7 @@ input[type="checkbox"] {
 .dd-state-heading h1 {
   margin: 0;
   color: var(--dd-ink);
-  font-size: clamp(1.9rem, 4vw, 2.55rem);
+  font-size: clamp(1.65rem, 3.2vw, 2rem);
   font-weight: 730;
   letter-spacing: -0.045em;
   line-height: 1.2;
@@ -148,18 +169,18 @@ input[type="checkbox"] {
 
 .dd-state-heading > p:last-child {
   max-width: 620px;
-  margin: 12px 0 0;
+  margin: 5px 0 0;
   color: var(--dd-secondary);
   font-size: 15px;
-  line-height: 1.65;
+  line-height: 1.45;
 }
 
 .dd-privacy-note {
   display: flex;
-  min-width: 220px;
+  min-width: 205px;
   align-items: center;
   gap: 11px;
-  padding: 13px 15px;
+  padding: 9px 12px;
   border-radius: 16px;
   color: #22725a;
   background: #eafaf4;
@@ -187,8 +208,8 @@ input[type="checkbox"] {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 4px;
-  margin: 8px 0 0;
-  padding: 5px;
+  margin: 0;
+  padding: 4px;
   border: 1px solid var(--dd-border);
   border-radius: 18px;
   background: var(--dd-surface);
@@ -199,7 +220,7 @@ input[type="checkbox"] {
 .dd-stepper li {
   display: flex;
   min-width: 0;
-  min-height: 46px;
+  min-height: 38px;
   align-items: center;
   justify-content: center;
   gap: 8px;
@@ -216,8 +237,8 @@ input[type="checkbox"] {
 
 .dd-step-icon {
   display: grid;
-  width: 26px;
-  height: 26px;
+  width: 24px;
+  height: 24px;
   flex: 0 0 auto;
   place-items: center;
   border-radius: 9px;
@@ -245,17 +266,28 @@ input[type="checkbox"] {
 }
 
 .dd-compose-grid {
-  align-items: start;
-  padding-top: 4px;
+  grid-template-columns: minmax(0, 1.08fr) minmax(0, 0.92fr);
+  min-height: 0;
+  flex: 1;
+  align-items: stretch;
+  gap: 12px;
+  padding-top: 0;
+}
+
+.dd-files-column {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
 }
 
 .dd-section-heading {
   display: flex;
-  min-height: 54px;
+  min-height: 42px;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
   padding: 0 2px;
 }
 
@@ -288,8 +320,6 @@ input[type="checkbox"] {
 .dd-panel,
 .dd-drop-zone,
 .dd-ready-summary,
-.dd-share-ready .rounded-2xl,
-.dd-share-ready .rounded-xl,
 .dd-about > .dd-panel,
 .dd-dialog {
   border: 1px solid var(--dd-border) !important;
@@ -304,6 +334,8 @@ input[type="checkbox"] {
 
 .dd-drop-zone {
   position: relative;
+  min-height: 0 !important;
+  flex: 1;
   border-color: transparent !important;
   outline: 1px solid rgba(0, 27, 55, 0.035);
   outline-offset: -1px;
@@ -337,6 +369,20 @@ input[type="checkbox"] {
   background: var(--dd-surface-muted) !important;
 }
 
+.dd-selected-files {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.dd-selected-files-list {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
 .dd-icon-button:hover {
   color: var(--dd-danger) !important;
   background: #fff0f1 !important;
@@ -352,13 +398,18 @@ input[type="checkbox"] {
 }
 
 .dd-settings-panel {
-  align-self: start;
-  padding: 23px !important;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  align-self: stretch;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 16px !important;
 }
 
 .dd-settings-heading {
-  min-height: 54px;
-  margin-bottom: 10px;
+  min-height: 38px;
+  margin-bottom: 0;
 }
 
 .dd-settings-heading .dd-kicker {
@@ -376,6 +427,23 @@ input[type="checkbox"] {
   background: var(--dd-primary-soft);
 }
 
+.dd-settings-content {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.dd-settings-presets {
+  flex: 0 0 auto;
+}
+
+.dd-preset-grid {
+  gap: 6px;
+}
+
 .dd-settings-panel h2 {
   color: var(--dd-ink);
   font-size: 18px;
@@ -383,6 +451,7 @@ input[type="checkbox"] {
 }
 
 .dd-preset {
+  min-height: 52px;
   color: var(--dd-secondary);
   background: #fff;
 }
@@ -400,8 +469,43 @@ input[type="checkbox"] {
 }
 
 .dd-setting-toggle {
+  min-height: 48px !important;
+  flex: 0 0 auto;
   color: var(--dd-secondary);
   background: var(--dd-surface-muted) !important;
+}
+
+.dd-settings-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.dd-settings-grid > label {
+  min-width: 0;
+  font-size: 12px;
+}
+
+.dd-settings-grid input,
+.dd-settings-grid select {
+  min-width: 0;
+  font-size: 14px;
+}
+
+.dd-setting-control {
+  display: grid;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.dd-setting-control.has-custom-value {
+  grid-template-columns: minmax(0, 1fr) 76px;
+}
+
+.dd-settings-content > .dd-primary-button {
+  min-height: 44px;
+  flex: 0 0 auto;
+  margin-top: auto;
 }
 
 .dd-switch {
@@ -444,17 +548,272 @@ input[type="checkbox"] {
 }
 
 .dd-ready-summary {
-  padding: 20px 22px;
+  min-height: 66px;
+  flex: 0 0 auto;
+  padding: 10px 14px;
   border-radius: var(--dd-radius);
 }
 
 .dd-share-ready {
-  padding-bottom: 6px;
+  display: flex;
+  width: 100%;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  padding-bottom: 0;
 }
 
-.dd-share-ready .space-y-5 > div,
 .dd-share-ready aside {
   border-radius: 18px !important;
+}
+
+.dd-ready-metrics {
+  display: grid;
+  flex: 0 0 auto;
+  grid-template-columns: repeat(2, minmax(94px, auto));
+  gap: 8px;
+  margin: 0;
+}
+
+.dd-ready-metrics > div {
+  min-width: 0;
+  padding: 6px 10px;
+  border-radius: 12px;
+  background: var(--dd-surface-muted);
+}
+
+.dd-ready-metrics dt {
+  color: var(--dd-muted);
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.dd-ready-metrics dd {
+  margin: 1px 0 0;
+  font-size: 14px;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.dd-ready-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(176px, 210px);
+  min-height: 0;
+  flex: 1;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.dd-active-share-card {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 14px;
+}
+
+.dd-active-share-heading,
+.dd-active-file-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.dd-active-share-heading {
+  flex: 0 0 auto;
+  padding: 0 2px 10px;
+}
+
+.dd-active-share-heading .dd-kicker {
+  color: var(--dd-success);
+}
+
+.dd-active-share-heading h2 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 730;
+  letter-spacing: -0.025em;
+}
+
+.dd-file-count {
+  flex: 0 0 auto;
+  padding: 5px 9px;
+  border-radius: 999px;
+  color: var(--dd-secondary);
+  background: var(--dd-surface-muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.dd-share-link-row {
+  display: flex;
+  min-width: 0;
+  min-height: 56px;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px 6px 10px;
+  border: 1px solid #d7e9ff;
+  border-radius: 14px;
+  background: #f7fbff;
+}
+
+.dd-list-icon {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 11px;
+  color: var(--dd-primary);
+  background: var(--dd-primary-soft);
+}
+
+.dd-list-label {
+  display: block;
+  margin-bottom: 1px;
+  color: var(--dd-muted);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.dd-active-file-region {
+  display: flex;
+  min-height: 88px;
+  flex: 1;
+  flex-direction: column;
+  margin-top: 10px;
+  overflow: hidden;
+}
+
+.dd-active-file-title {
+  flex: 0 0 auto;
+  padding: 0 2px 6px;
+  color: var(--dd-muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.dd-active-file-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  border: 1px solid var(--dd-border);
+  border-radius: 14px;
+  overscroll-behavior: contain;
+  background: var(--dd-surface-muted);
+  list-style: none;
+}
+
+.dd-active-file-list li {
+  display: flex;
+  min-width: 0;
+  min-height: 54px;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 9px;
+  border-bottom: 1px solid var(--dd-border);
+}
+
+.dd-active-file-list li:nth-child(odd) {
+  border-right: 1px solid var(--dd-border);
+}
+
+.dd-active-file-list .dd-list-icon {
+  width: 32px;
+  height: 32px;
+}
+
+.dd-transfer-list {
+  display: grid;
+  max-height: 92px;
+  flex: 0 0 auto;
+  gap: 6px;
+  margin-top: 8px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.dd-transfer-row {
+  padding: 9px 10px;
+}
+
+.dd-transfer-row p {
+  margin: 0;
+}
+
+.dd-share-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 0.9fr) minmax(0, 0.9fr);
+  flex: 0 0 auto;
+  gap: 7px;
+  margin-top: 10px;
+}
+
+.dd-share-actions > button {
+  min-width: 0;
+  min-height: 42px;
+  padding-inline: 10px;
+  white-space: nowrap;
+}
+
+.dd-qr-card {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.dd-qr-heading {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  text-align: left;
+}
+
+.dd-qr-heading strong,
+.dd-qr-heading small {
+  display: block;
+}
+
+.dd-qr-heading strong {
+  font-size: 13px;
+}
+
+.dd-qr-heading small {
+  margin-top: 1px;
+  color: var(--dd-muted);
+  font-size: 10px;
+}
+
+.dd-qr-button {
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+.dd-qr-button img {
+  max-height: 220px;
+  object-fit: contain;
+}
+
+.dd-qr-actions {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.dd-qr-actions > button {
+  min-width: 0;
+  padding-inline: 7px;
+  font-size: 11px;
 }
 
 .dd-field-label {
@@ -466,11 +825,47 @@ input[type="checkbox"] {
 }
 
 .dd-about {
-  padding-top: 48px;
+  display: grid;
+  min-height: 0;
+  flex: 1;
+  place-items: center;
+  padding-block: 12px;
 }
 
 .dd-about > .dd-panel {
   border-radius: var(--dd-radius) !important;
+}
+
+.dd-about-card {
+  width: 100%;
+  max-height: 100%;
+  overflow: hidden;
+  padding: 20px !important;
+}
+
+.dd-about-title {
+  margin-top: 14px !important;
+  font-size: 22px;
+}
+
+.dd-about-description {
+  margin-top: 12px !important;
+  line-height: 1.5;
+}
+
+.dd-about-links {
+  gap: 8px;
+  margin-top: 14px !important;
+}
+
+.dd-about-links + .dd-about-toggle {
+  min-height: 54px;
+  margin-top: 12px !important;
+  padding-top: 10px !important;
+}
+
+.dd-about-toggle + .dd-about-toggle {
+  min-height: 44px;
 }
 
 .dd-about a {
@@ -483,6 +878,12 @@ input[type="checkbox"] {
 }
 
 .dd-alert {
+  position: fixed;
+  z-index: 45;
+  right: 20px;
+  bottom: 20px;
+  width: min(420px, calc(100vw - 40px));
+  margin: 0 !important;
   border-color: #ffd5d8 !important;
   color: #b42331 !important;
   background: #fff2f3 !important;
@@ -626,28 +1027,212 @@ input[type="checkbox"] {
 }
 
 @media (max-width: 760px) {
-  .dd-state-header {
-    grid-template-columns: 1fr;
-    gap: 18px;
-    padding-top: 38px;
+  .dd-ready-summary,
+  .dd-section-heading {
+    align-items: flex-start;
   }
 
   .dd-privacy-note {
-    width: fit-content;
+    min-width: 190px;
+  }
+
+  .dd-stepper li {
+    gap: 5px;
+    padding-inline: 5px;
+    font-size: 11px;
+  }
+
+  .dd-ready-grid {
+    grid-template-columns: minmax(0, 1fr) 176px;
+  }
+
+  .dd-qr-card {
+    padding: 11px !important;
+  }
+
+  .dd-qr-actions {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-height: 680px) and (min-width: 561px) {
+  .dd-state-header {
+    gap: 8px;
+    padding: 10px 0 8px;
+  }
+
+  .dd-state-heading > p:last-child,
+  .dd-privacy-note {
+    display: none;
+  }
+
+  .dd-settings-panel {
+    padding: 12px !important;
+  }
+
+  .dd-settings-heading {
+    min-height: 34px;
+  }
+
+  .dd-settings-content {
+    gap: 8px;
+    margin-top: 8px;
+  }
+
+  .dd-preset-grid {
+    margin-top: 6px;
+  }
+
+  .dd-preset {
+    min-height: 44px;
+    padding-inline: 8px;
+    text-align: center;
+  }
+
+  .dd-preset > span:last-child,
+  .dd-setting-toggle span span {
+    display: none;
+  }
+
+  .dd-settings-grid {
+    gap: 8px;
+  }
+
+  .dd-settings-grid > label {
+    font-size: 11px;
+  }
+
+  .dd-setting-control,
+  .dd-settings-grid > label > input,
+  .dd-settings-grid > label > select {
+    margin-top: 6px;
+  }
+
+  .dd-setting-toggle {
+    min-height: 44px !important;
+  }
+
+  .dd-drop-zone {
+    padding: 16px;
+  }
+
+  .dd-drop-zone .dd-drop-icon {
+    width: 46px;
+    height: 46px;
+  }
+
+  .dd-drop-zone strong {
+    margin-top: 12px;
+  }
+
+  .dd-drop-zone .dd-drop-action {
+    margin-top: 14px;
+  }
+
+  .dd-drop-zone > span:last-child {
+    margin-top: 10px;
+  }
+
+  .dd-ready-summary {
+    min-height: 60px;
+    padding-block: 7px;
+  }
+
+  .dd-ready-grid {
+    margin-top: 8px;
+  }
+
+  .dd-active-share-card {
+    padding: 10px;
+  }
+
+  .dd-active-share-heading {
+    padding-bottom: 7px;
+  }
+
+  .dd-active-file-region {
+    min-height: 54px;
+    margin-top: 7px;
+  }
+
+  .dd-active-file-list li {
+    min-height: 48px;
+    padding-block: 5px;
+  }
+
+  .dd-share-actions {
+    margin-top: 7px;
+  }
+
+  .dd-transfer-list {
+    max-height: 72px;
+    margin-top: 6px;
+  }
+}
+
+@media (max-width: 560px) {
+  body {
+    height: auto;
+    min-height: 100dvh;
+    overflow-y: auto;
+  }
+
+  .dd-app {
+    height: auto;
+    min-height: 100dvh;
+    overflow: visible;
+  }
+
+  .dd-workspace,
+  .dd-share-screen {
+    overflow: visible;
+  }
+
+  .dd-workspace {
+    padding-bottom: 24px;
+  }
+
+  .dd-state-header {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .dd-privacy-note {
+    display: none;
   }
 
   .dd-stepper {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    margin-top: 0;
   }
 
   .dd-stepper li {
     justify-content: flex-start;
   }
 
-  .dd-ready-summary,
-  .dd-section-heading {
-    align-items: flex-start;
+  .dd-compose-grid,
+  .dd-ready-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .dd-drop-zone {
+    min-height: 300px !important;
+  }
+
+  .dd-settings-panel,
+  .dd-active-share-card,
+  .dd-qr-card {
+    overflow: visible;
+  }
+
+  .dd-active-file-list,
+  .dd-selected-files-list,
+  .dd-transfer-list {
+    max-height: none;
+    overflow: visible;
+  }
+
+  .dd-qr-button img {
+    max-height: 280px;
   }
 }
 
@@ -672,9 +1257,25 @@ input[type="checkbox"] {
     font-size: 1.8rem;
   }
 
-  .dd-section-heading,
-  .dd-ready-summary {
+  .dd-section-heading {
     flex-direction: column;
+  }
+
+  .dd-ready-summary {
+    align-items: stretch;
+  }
+
+  .dd-ready-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .dd-settings-grid,
+  .dd-active-file-list {
+    grid-template-columns: 1fr;
+  }
+
+  .dd-active-file-list li:nth-child(odd) {
+    border-right: 0;
   }
 }
 
