@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { chooseDownloadRecommendation } from "./LandingPage";
+import { chooseDownloadRecommendation } from "./download-recommendation";
 
 describe("chooseDownloadRecommendation", () => {
   it("recommends the Windows installer for Windows browsers", () => {

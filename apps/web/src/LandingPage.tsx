@@ -23,13 +23,16 @@ import {
   Zap,
 } from "lucide-react";
 import { BrandMark } from "@directdrop/ui";
+import {
+  chooseDownloadRecommendation,
+  type DownloadKey,
+  type DownloadRecommendation,
+} from "./download-recommendation";
 
 const sourceUrl = "https://github.com/HechoLP/directdrop";
 const releaseUrl = `${sourceUrl}/releases/latest`;
 const releaseVersion = "v0.2.0";
 const releaseDownloadBase = `${sourceUrl}/releases/download/${releaseVersion}`;
-
-type DownloadKey = "mac-arm64" | "mac-intel" | "windows-x64";
 
 type DownloadOption = {
   key: DownloadKey;
@@ -38,17 +41,6 @@ type DownloadOption = {
   title: string;
   detail: string;
   href: string;
-};
-
-type DownloadRecommendation = {
-  key: DownloadKey;
-  exact: boolean;
-};
-
-type NavigatorSignals = {
-  platform?: string;
-  userAgent?: string;
-  architecture?: string;
 };
 
 type NavigatorWithUAData = Navigator & {
@@ -160,31 +152,6 @@ const faqs: Array<{ question: string; answer: ReactNode }> = [
       "기본 구성은 STUN을 사용하는 Direct P2P 전용입니다. 회사·학교처럼 방화벽이 엄격한 환경이나 일부 NAT에서는 연결이 실패할 수 있으며, 파일을 서버에 업로드하는 방식으로 우회하지 않습니다.",
   },
 ];
-
-export function chooseDownloadRecommendation({
-  platform = "",
-  userAgent = "",
-  architecture = "",
-}: NavigatorSignals): DownloadRecommendation | null {
-  const platformSignal = `${platform} ${userAgent}`.toLowerCase();
-  const architectureSignal = architecture.toLowerCase();
-
-  if (platformSignal.includes("windows")) {
-    return { key: "windows-x64", exact: true };
-  }
-
-  if (platformSignal.includes("mac")) {
-    if (/arm|aarch64/.test(architectureSignal)) {
-      return { key: "mac-arm64", exact: true };
-    }
-    if (/x86|x64|amd64/.test(architectureSignal)) {
-      return { key: "mac-intel", exact: true };
-    }
-    return { key: "mac-arm64", exact: false };
-  }
-
-  return null;
-}
 
 async function detectDownloadRecommendation(): Promise<DownloadRecommendation | null> {
   const browserNavigator = navigator as NavigatorWithUAData;
