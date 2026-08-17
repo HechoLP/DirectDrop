@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 export const APP_NAME = "DirectDrop";
-export const APP_VERSION = "0.1.4";
+export const APP_VERSION = "0.2.0";
 export const PROTOCOL_VERSION = 1;
 export const DEFAULT_CHUNK_SIZE = 256 * 1024;
 export const DATA_CHANNEL_HIGH_WATER_MARK = 8 * 1024 * 1024;
@@ -14,7 +14,23 @@ export const MAX_PENDING_ICE_CANDIDATES = 256;
 export const MAX_FILE_CHUNK_BYTES = 1024 * 1024;
 
 const opaqueIdSchema = z.string().min(8).max(128);
-const signalingTextSchema = z.string().min(1).max(60 * 1024);
+const reservedWindowsStem = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i;
+const unsafePathDirectionControls = /[\u200e\u200f\u202a-\u202e\u2066-\u2069]/;
+
+function hasUnsafePathCharacter(value: string) {
+  return [...value].some((character) => {
+    const codePoint = character.codePointAt(0) ?? 0;
+    return (
+      codePoint <= 0x1f ||
+      codePoint === 0x7f ||
+      unsafePathDirectionControls.test(character)
+    );
+  });
+}
+const signalingTextSchema = z
+  .string()
+  .min(1)
+  .max(60 * 1024);
 
 export const approvalModeSchema = z.enum(["AUTO", "MANUAL"]);
 export type ApprovalMode = z.infer<typeof approvalModeSchema>;
@@ -36,6 +52,31 @@ export const publicFileSchema = z.object({
   size: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
   mimeType: z.string().min(1).max(255),
   modifiedAt: z.number().int().nonnegative().optional(),
+  relativePath: z
+    .string()
+    .min(1)
+    .max(1024)
+    .refine(
+      (value) =>
+        !value.startsWith("/") &&
+        !value.startsWith("\\") &&
+        !value.includes("\\") &&
+        !value.includes(":") &&
+        !value.split("/").some((part) => {
+          const stem = part.split(".", 1)[0] ?? "";
+          return (
+            !part ||
+            part === "." ||
+            part === ".." ||
+            part.endsWith(".") ||
+            part.endsWith(" ") ||
+            hasUnsafePathCharacter(part) ||
+            reservedWindowsStem.test(stem)
+          );
+        }),
+      "Unsafe relative path",
+    )
+    .optional(),
 });
 export type PublicFile = z.infer<typeof publicFileSchema>;
 
@@ -78,7 +119,10 @@ export type ShareMetadata = z.infer<typeof shareMetadataSchema>;
 
 const iceServerSchema = z
   .object({
-    urls: z.union([z.string().min(1).max(2048), z.array(z.string().min(1).max(2048)).max(16)]),
+    urls: z.union([
+      z.string().min(1).max(2048),
+      z.array(z.string().min(1).max(2048)).max(16),
+    ]),
     username: z.string().max(512).optional(),
     credential: z.string().max(2048).optional(),
   })
@@ -110,137 +154,199 @@ const messageBaseSchema = z.object({
 });
 
 export const clientMessageSchema = z.discriminatedUnion("type", [
-  z.object({
-    type: z.literal("REGISTER_SHARE"),
-    shareToken: opaqueIdSchema,
-    controlKey: opaqueIdSchema,
-  }).strict(),
-  z.object({
-    type: z.literal("UNREGISTER_SHARE"),
-    shareToken: opaqueIdSchema,
-    controlKey: opaqueIdSchema,
-  }).strict(),
-  z.object({ type: z.literal("JOIN_SHARE"), shareToken: opaqueIdSchema }).strict(),
-  z.object({ type: z.literal("HEARTBEAT"), shareToken: opaqueIdSchema }).strict(),
-  z.object({
-    type: z.literal("DOWNLOAD_REQUEST"),
-    shareToken: opaqueIdSchema,
-    accessToken: opaqueIdSchema.optional(),
-  }).strict(),
-  z.object({
-    type: z.literal("DOWNLOAD_ACCEPT"),
-    sessionId: opaqueIdSchema,
-    peerId: opaqueIdSchema,
-  }).strict(),
-  z.object({
-    type: z.literal("DOWNLOAD_REJECT"),
-    sessionId: opaqueIdSchema,
-    peerId: opaqueIdSchema,
-    reason: z.string().max(500).optional(),
-  }).strict(),
-  z.object({
-    type: z.literal("OFFER"),
-    sessionId: opaqueIdSchema,
-    toPeerId: opaqueIdSchema,
-    sdp: signalingTextSchema,
-  }).strict(),
-  z.object({
-    type: z.literal("ANSWER"),
-    sessionId: opaqueIdSchema,
-    toPeerId: opaqueIdSchema,
-    sdp: signalingTextSchema,
-  }).strict(),
-  z.object({
-    type: z.literal("ICE_CANDIDATE"),
-    sessionId: opaqueIdSchema,
-    toPeerId: opaqueIdSchema,
-    candidate: z.record(z.string(), z.unknown()),
-  }).strict(),
-  z.object({ type: z.literal("TRANSFER_STARTED"), sessionId: opaqueIdSchema }).strict(),
-  z.object({ type: z.literal("TRANSFER_PROGRESS"), sessionId: opaqueIdSchema }).strict(),
-  z.object({ type: z.literal("TRANSFER_SENT"), sessionId: opaqueIdSchema }).strict(),
-  z.object({ type: z.literal("TRANSFER_COMPLETED"), sessionId: opaqueIdSchema }).strict(),
-  z.object({
-    type: z.literal("TRANSFER_FAILED"),
-    sessionId: opaqueIdSchema,
-    reason: z.string().max(500).optional(),
-  }).strict(),
-  z.object({ type: z.literal("TRANSFER_CANCELLED"), sessionId: opaqueIdSchema }).strict(),
+  z
+    .object({
+      type: z.literal("REGISTER_SHARE"),
+      shareToken: opaqueIdSchema,
+      controlKey: opaqueIdSchema,
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("UNREGISTER_SHARE"),
+      shareToken: opaqueIdSchema,
+      controlKey: opaqueIdSchema,
+    })
+    .strict(),
+  z
+    .object({ type: z.literal("JOIN_SHARE"), shareToken: opaqueIdSchema })
+    .strict(),
+  z
+    .object({ type: z.literal("HEARTBEAT"), shareToken: opaqueIdSchema })
+    .strict(),
+  z
+    .object({
+      type: z.literal("DOWNLOAD_REQUEST"),
+      shareToken: opaqueIdSchema,
+      accessToken: opaqueIdSchema.optional(),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("DOWNLOAD_ACCEPT"),
+      sessionId: opaqueIdSchema,
+      peerId: opaqueIdSchema,
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("DOWNLOAD_REJECT"),
+      sessionId: opaqueIdSchema,
+      peerId: opaqueIdSchema,
+      reason: z.string().max(500).optional(),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("OFFER"),
+      sessionId: opaqueIdSchema,
+      toPeerId: opaqueIdSchema,
+      sdp: signalingTextSchema,
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("ANSWER"),
+      sessionId: opaqueIdSchema,
+      toPeerId: opaqueIdSchema,
+      sdp: signalingTextSchema,
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("ICE_CANDIDATE"),
+      sessionId: opaqueIdSchema,
+      toPeerId: opaqueIdSchema,
+      candidate: z.record(z.string(), z.unknown()),
+    })
+    .strict(),
+  z
+    .object({ type: z.literal("TRANSFER_STARTED"), sessionId: opaqueIdSchema })
+    .strict(),
+  z
+    .object({ type: z.literal("TRANSFER_PROGRESS"), sessionId: opaqueIdSchema })
+    .strict(),
+  z
+    .object({ type: z.literal("TRANSFER_SENT"), sessionId: opaqueIdSchema })
+    .strict(),
+  z
+    .object({
+      type: z.literal("TRANSFER_COMPLETED"),
+      sessionId: opaqueIdSchema,
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("TRANSFER_FAILED"),
+      sessionId: opaqueIdSchema,
+      reason: z.string().max(500).optional(),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("TRANSFER_CANCELLED"),
+      sessionId: opaqueIdSchema,
+    })
+    .strict(),
 ]);
 export type ClientMessage = z.infer<typeof clientMessageSchema>;
 
 export const serverMessageSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("CONNECTED"), peerId: opaqueIdSchema }).strict(),
-  z.object({ type: z.literal("REGISTERED"), shareToken: opaqueIdSchema }).strict(),
-  z.object({
-    type: z.literal("SHARE_STATE"),
-    shareToken: opaqueIdSchema,
-    senderOnline: z.boolean(),
-    status: shareMetadataSchema.shape.status,
-  }).strict(),
-  z.object({
-    type: z.literal("DOWNLOAD_REQUESTED"),
-    sessionId: opaqueIdSchema,
-    peerId: opaqueIdSchema,
-    shareToken: opaqueIdSchema,
-  }).strict(),
-  z.object({
-    type: z.literal("DOWNLOAD_ACCEPTED"),
-    sessionId: opaqueIdSchema,
-    peerId: opaqueIdSchema,
-  }).strict(),
-  z.object({
-    type: z.literal("DOWNLOAD_REJECTED"),
-    sessionId: opaqueIdSchema,
-    reason: z.string().max(500).optional(),
-  }).strict(),
-  z.object({
-    type: z.literal("OFFER"),
-    sessionId: opaqueIdSchema,
-    peerId: opaqueIdSchema,
-    sdp: signalingTextSchema,
-  }).strict(),
-  z.object({
-    type: z.literal("ANSWER"),
-    sessionId: opaqueIdSchema,
-    peerId: opaqueIdSchema,
-    sdp: signalingTextSchema,
-  }).strict(),
-  z.object({
-    type: z.literal("ICE_CANDIDATE"),
-    sessionId: opaqueIdSchema,
-    peerId: opaqueIdSchema,
-    candidate: z.record(z.string(), z.unknown()),
-  }).strict(),
-  z.object({
-    type: z.literal("TRANSFER_STATE"),
-    sessionId: opaqueIdSchema,
-    state: downloadSessionStateSchema,
-    completedDownloads: z.number().int().nonnegative().optional(),
-  }).strict(),
-  z.object({
-    type: z.literal("ERROR"),
-    code: z.string().min(1).max(100),
-    message: z.string().min(1).max(500),
-    requestId: z.string().max(128).optional(),
-  }).strict(),
+  z
+    .object({ type: z.literal("REGISTERED"), shareToken: opaqueIdSchema })
+    .strict(),
+  z
+    .object({
+      type: z.literal("SHARE_STATE"),
+      shareToken: opaqueIdSchema,
+      senderOnline: z.boolean(),
+      status: shareMetadataSchema.shape.status,
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("DOWNLOAD_REQUESTED"),
+      sessionId: opaqueIdSchema,
+      peerId: opaqueIdSchema,
+      shareToken: opaqueIdSchema,
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("DOWNLOAD_ACCEPTED"),
+      sessionId: opaqueIdSchema,
+      peerId: opaqueIdSchema,
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("DOWNLOAD_REJECTED"),
+      sessionId: opaqueIdSchema,
+      reason: z.string().max(500).optional(),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("OFFER"),
+      sessionId: opaqueIdSchema,
+      peerId: opaqueIdSchema,
+      sdp: signalingTextSchema,
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("ANSWER"),
+      sessionId: opaqueIdSchema,
+      peerId: opaqueIdSchema,
+      sdp: signalingTextSchema,
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("ICE_CANDIDATE"),
+      sessionId: opaqueIdSchema,
+      peerId: opaqueIdSchema,
+      candidate: z.record(z.string(), z.unknown()),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("TRANSFER_STATE"),
+      sessionId: opaqueIdSchema,
+      state: downloadSessionStateSchema,
+      completedDownloads: z.number().int().nonnegative().optional(),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("ERROR"),
+      code: z.string().min(1).max(100),
+      message: z.string().min(1).max(500),
+      requestId: z.string().max(128).optional(),
+    })
+    .strict(),
 ]);
 export type ServerMessage = z.infer<typeof serverMessageSchema>;
 
 export const dataChannelControlSchema = z.discriminatedUnion("type", [
-  z.object({
-    type: z.literal("MANIFEST"),
-    protocolVersion: z.literal(PROTOCOL_VERSION),
-    files: z.array(publicFileSchema).min(1).max(MAX_SHARE_FILES),
-    totalSize: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
-  }).strict(),
-  z.object({
-    type: z.literal("FILE_START"),
-    fileId: opaqueIdSchema,
-    name: z.string().min(1).max(255),
-    size: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
-    mimeType: z.string().min(1).max(255),
-  }).strict(),
+  z
+    .object({
+      type: z.literal("MANIFEST"),
+      protocolVersion: z.literal(PROTOCOL_VERSION),
+      files: z.array(publicFileSchema).min(1).max(MAX_SHARE_FILES),
+      totalSize: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("FILE_START"),
+      fileId: opaqueIdSchema,
+      name: z.string().min(1).max(255),
+      size: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+      mimeType: z.string().min(1).max(255),
+    })
+    .strict(),
   z
     .object({
       type: z.literal("CHUNK"),
@@ -252,7 +358,9 @@ export const dataChannelControlSchema = z.discriminatedUnion("type", [
     .strict(),
   z.object({ type: z.literal("FILE_END"), fileId: opaqueIdSchema }).strict(),
   z.object({ type: z.literal("TRANSFER_COMPLETE") }).strict(),
-  z.object({ type: z.literal("TRANSFER_ERROR"), message: z.string().max(500) }).strict(),
+  z
+    .object({ type: z.literal("TRANSFER_ERROR"), message: z.string().max(500) })
+    .strict(),
 ]);
 export type DataChannelControl = z.infer<typeof dataChannelControlSchema>;
 

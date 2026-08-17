@@ -1,16 +1,19 @@
 [package]
 name = "directdrop"
-version = "0.1.4"
+version = "0.2.0"
 description = "Direct P2P file sharing with no cloud file storage"
 authors = ["DirectDrop contributors"]
 license = "MIT"
 repository = "https://github.com/HechoLP/directdrop"
 edition = "2021"
-rust-version = "1.77.2"
+rust-version = "1.88"
 
 [lib]
 name = "directdrop_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
+
+[features]
+debug-inspector = ["tauri/devtools"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
@@ -26,3 +29,13 @@ serde_json = "1"
 uuid = { version = "1", features = ["v4"] }
 mime_guess = "2"
 thiserror = "2"
+base64 = "0.23"
+hmac = "0.13"
+hostname = "0.4"
+mdns-sd = { version = "0.21", default-features = false, features = ["async"] }
+rand = "0.8.5"
+rcgen = "0.14"
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+sha2 = "0.11"
+tokio = { version = "1", features = ["fs", "io-util", "macros", "net", "rt-multi-thread", "sync", "time"] }
+tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12"] }

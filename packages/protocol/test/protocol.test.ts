@@ -31,6 +31,35 @@ describe("protocol validation", () => {
     expect(parsed).not.toHaveProperty("localPath");
   });
 
+  it("accepts safe folder metadata and rejects cross-platform traversal", () => {
+    const input = {
+      id: "public-file-1",
+      name: "main.rs",
+      size: 42,
+      mimeType: "text/plain",
+    };
+    expect(
+      publicFileSchema.safeParse({
+        ...input,
+        relativePath: "Project/src/main.rs",
+      }).success,
+    ).toBe(true);
+    for (const relativePath of [
+      "../secret",
+      "/etc/passwd",
+      "C:/Windows/file",
+      "folder\\secret",
+      "folder/CON",
+      "folder/file. ",
+      "safe/\u202etxt.exe",
+    ]) {
+      expect(
+        publicFileSchema.safeParse({ ...input, relativePath }).success,
+        relativePath,
+      ).toBe(false);
+    }
+  });
+
   it("enforces custom download limits", () => {
     const input = {
       files: [
