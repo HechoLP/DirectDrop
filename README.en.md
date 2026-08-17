@@ -16,6 +16,8 @@ Creates a temporary `share.dlfkd.dev` link and QR code. The recipient saves file
 
 Discovers DirectDrop devices on the same Wi-Fi or Ethernet network with mDNS and transfers without internet access. First-time pairing requires both users to compare a six-digit code. Later connections authenticate the device with its pinned certificate fingerprint and persistent trust key. File and folder bytes only travel through the authenticated TLS connection. See [Nearby LAN Share](docs/nearby.md) for protocol and security details.
 
+> **Nearby requirement:** DirectDrop v0.2.0 or later must be installed and running on both the sending and receiving devices. Nearby discovers desktop apps on the same local network and cannot use a browser as a Nearby device. Use `DirectDrop · Share Link` when the recipient should receive files without installing the app.
+
 ## Features
 
 - Direct peer-to-peer transfer over WebRTC RTCDataChannel
@@ -59,7 +61,7 @@ Cloudflare Tunnel carries the Share Link landing page, API, and WebSocket signal
 ## Requirements and limitations
 
 - The sender's DirectDrop app must stay online while files are being shared.
-- Nearby requires DirectDrop v0.2.0 or later on both devices and the same private/link-local IPv4 network.
+- Nearby requires DirectDrop v0.2.0 or later to be installed and running on both devices on the same private/link-local IPv4 network. Browsers are not discoverable as Nearby devices.
 - Allow Local Network access on macOS. On Windows, allow DirectDrop only on `Private networks` when the firewall prompt appears.
 - VPNs, guest Wi-Fi, or AP isolation may block device-to-device traffic or mDNS discovery.
 - The default configuration uses STUN for direct P2P connections. Some NAT or firewall environments may prevent a connection.
