@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { APP_VERSION } from "@directdrop/protocol";
-import { buildApp } from "../src/app.js";
+import { buildApp, robotsDirective } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { DirectDropStore } from "../src/store.js";
 
@@ -26,6 +26,19 @@ async function testApp(extra: Record<string, string> = {}) {
 }
 
 describe("DirectDrop API", () => {
+  it("indexes only the successful public landing page", () => {
+    expect(robotsDirective("/", "text/html", 200)).toBe("index, follow");
+    expect(robotsDirective("/?from=github", "text/html", 200)).toBe(
+      "index, follow",
+    );
+    expect(robotsDirective("/s/private-share", "text/html", 200)).toBe(
+      "noindex, nofollow, noarchive",
+    );
+    expect(robotsDirective("/", "text/html", 404)).toBe(
+      "noindex, nofollow, noarchive",
+    );
+  });
+
   it("reports that health does not use file storage", async () => {
     const app = await testApp();
     const response = await app.inject({ method: "GET", url: "/health" });

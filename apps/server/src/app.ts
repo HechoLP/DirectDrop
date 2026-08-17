@@ -20,6 +20,20 @@ import { secureToken } from "./token.js";
 type AccessGrant = { shareId: string; expiresAt: number };
 const ROUTE_TOKEN_PATTERN = /^[A-Za-z0-9_-]{8,128}$/;
 
+export function robotsDirective(
+  url: string,
+  accept: string | undefined,
+  statusCode: number,
+) {
+  const path = url.split("?", 1)[0];
+  return path === "/" &&
+    accept?.includes("text/html") &&
+    statusCode >= 200 &&
+    statusCode < 400
+    ? "index, follow"
+    : "noindex, nofollow, noarchive";
+}
+
 function metadata(
   share: StoredShare,
   senderOnline: boolean,
@@ -70,7 +84,10 @@ export async function buildApp(
       .header("referrer-policy", "no-referrer")
       .header("permissions-policy", "camera=(), microphone=(), geolocation=()")
       .header("x-frame-options", "DENY")
-      .header("x-robots-tag", "noindex, nofollow, noarchive")
+      .header(
+        "x-robots-tag",
+        robotsDirective(request.url, request.headers.accept, reply.statusCode),
+      )
       .header(
         "content-security-policy",
         `default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; img-src 'self' data: blob:; font-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' ${config.publicSignalingUrl}`,
