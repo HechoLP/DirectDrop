@@ -37,30 +37,31 @@
 
 ## OS matrix
 
-| Sender      | Receiver    | 자동 검증                      | 실제 물리 장치           |
-| ----------- | ----------- | ------------------------------ | ------------------------ |
-| macOS arm64 | macOS arm64 | 실제 격리 앱 2개 E2E PASS      | 별도 물리 장치 검증 필요 |
-| macOS       | Windows x64 | GitHub macOS/Windows native CI | 릴리스 전/후 별도 기록   |
-| Windows x64 | macOS       | GitHub macOS/Windows native CI | 릴리스 전/후 별도 기록   |
-| Windows x64 | Windows x64 | GitHub Windows native CI       | 릴리스 전/후 별도 기록   |
+| Sender      | Receiver    | 자동 검증                           | 실제 물리 장치           |
+| ----------- | ----------- | ----------------------------------- | ------------------------ |
+| macOS arm64 | macOS arm64 | 실제 격리 앱 2개 E2E PASS           | 별도 물리 장치 검증 필요 |
+| macOS       | Windows x64 | GitHub macOS/Windows native CI PASS | 별도 물리 장치 검증 필요 |
+| Windows x64 | macOS       | GitHub macOS/Windows native CI PASS | 별도 물리 장치 검증 필요 |
+| Windows x64 | Windows x64 | GitHub Windows native CI PASS       | 별도 물리 장치 검증 필요 |
 
 ## Share Link regression
 
-| 항목                                                | 결과                                                 |
-| --------------------------------------------------- | ---------------------------------------------------- |
-| protocol/server/web/desktop test suites             | PASS locally                                         |
-| Origin allowlist/security headers                   | PASS locally, production deploy verification pending |
-| WebRTC integrity/backpressure/completion accounting | PASS automated fixtures                              |
-| Chrome/Edge/Safari/Firefox physical transfer        | 별도 실제 브라우저 검증 필요                         |
+| 항목                                                | 결과                           |
+| --------------------------------------------------- | ------------------------------ |
+| protocol/server/web/desktop test suites             | PASS locally                   |
+| Origin allowlist/security headers                   | PASS locally and on production |
+| WebRTC integrity/backpressure/completion accounting | PASS automated fixtures        |
+| Chrome/Edge/Safari/Firefox physical transfer        | 별도 실제 브라우저 검증 필요   |
 
 ## Release gates
 
-| Gate                                    | 현재 상태                       |
-| --------------------------------------- | ------------------------------- |
-| `pnpm check`                            | PASS locally                    |
-| Rust fmt/clippy/tests                   | PASS locally                    |
-| macOS arm64 app build                   | PASS locally with `--no-sign`   |
-| Windows installer                       | pending GitHub release workflow |
-| GitHub CI current commit                | pending push                    |
-| Production hardening                    | pending deploy                  |
-| Apple Developer ID signing/notarization | 사용자 요청에 따라 제외         |
+| Gate                                    | 현재 상태                        |
+| --------------------------------------- | -------------------------------- |
+| `pnpm check`                            | PASS locally                     |
+| Rust fmt/clippy/tests                   | PASS locally                     |
+| macOS arm64 app build                   | PASS locally and GitHub release  |
+| macOS Intel app build                   | PASS in GitHub release workflow  |
+| Windows installer                       | PASS, NSIS EXE and x64 MSI       |
+| GitHub CI current commit                | PASS, run `31990090144`          |
+| Production hardening                    | PASS, v0.2.0 public verification |
+| Apple Developer ID signing/notarization | 사용자 요청에 따라 제외          |

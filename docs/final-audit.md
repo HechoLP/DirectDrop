@@ -4,22 +4,22 @@
 
 ## 결론
 
-**로컬 릴리스 준비 상태: PASS**
+**릴리스 및 운영 배포 상태: PASS**
 
 DirectDrop v0.2.0의 Nearby 핵심 경로는 macOS arm64 한 대에서 서로 다른 bundle ID와 별도 앱 데이터 디렉터리를 사용하는 두 앱 인스턴스로 실제 검증했습니다. mDNS 발견, 인증서 고정 TLS, 6자리 상호 확인, 신뢰 저장, 수신 승인, 파일 스트리밍, 양쪽 완료 기록과 SHA-256 원본 일치를 확인했습니다.
 
-현재 남은 릴리스 게이트는 GitHub 원격 CI/Windows 빌드, 공개 artifact 생성, 운영 `share.dlfkd.dev` 배포와 배포 후 검증입니다. Apple Developer ID 서명과 공증은 사용자 요청에 따라 이번 릴리스 범위에서 제외합니다.
+GitHub 원격 CI, Apple Silicon·Intel macOS와 Windows installer 생성, 공개 checksum 검증, 운영 `share.dlfkd.dev` v0.2.0 배포와 배포 후 보안 검증을 완료했습니다. Apple Developer ID 서명과 공증은 사용자 요청에 따라 이번 릴리스 범위에서 제외했습니다.
 
 ## 감사 환경
 
-| 항목           | 확인 범위                                                         |
-| -------------- | ----------------------------------------------------------------- |
-| OS             | macOS arm64                                                       |
-| Desktop        | Tauri 2 release bundle 2개, 별도 identity/history/storage         |
-| Nearby network | 같은 Mac의 loopback을 포함한 실제 OS mDNS browse와 native TCP/TLS |
-| Browser/server | workspace production build와 자동 테스트                          |
-| Windows        | GitHub Windows runner에서 확인 예정                               |
-| 물리 장치      | 서로 다른 물리 Mac/Windows 조합은 별도 후속 matrix 필요           |
+| 항목           | 확인 범위                                                            |
+| -------------- | -------------------------------------------------------------------- |
+| OS             | macOS arm64                                                          |
+| Desktop        | Tauri 2 release bundle 2개, 별도 identity/history/storage            |
+| Nearby network | 같은 Mac의 loopback을 포함한 실제 OS mDNS browse와 native TCP/TLS    |
+| Browser/server | workspace production build와 자동 테스트                             |
+| Windows        | GitHub Windows runner의 fmt, Clippy, 21 Rust tests와 installer build |
+| 물리 장치      | 서로 다른 물리 Mac/Windows 조합은 별도 후속 matrix 필요              |
 
 ## 자동 검증 결과
 
@@ -95,8 +95,22 @@ open /Applications/DirectDrop.app
 
 ### Artifact 무결성
 
-- 릴리스 workflow가 모든 공개 installer의 `SHA256SUMS.txt`를 생성합니다.
-- GitHub Actions와 공개 checksum을 배포 후 다시 확인합니다.
+- 공개 릴리스: <https://github.com/HechoLP/DirectDrop/releases/tag/v0.2.0>
+- GitHub CI `31990090144`: web/server, macOS native, Windows native PASS
+- Release workflow `31990446156`: ARM DMG, Intel DMG, Windows NSIS EXE/MSI, checksum PASS
+- 공개 installer 4개를 다시 다운로드해 `SHA256SUMS.txt`와 모두 일치함을 확인했습니다.
+- 두 DMG는 `hdiutil verify` PASS, 내부 binary는 각각 arm64와 x86_64, ad-hoc signature와 Local Network/Bonjour declaration을 확인했습니다.
+- Windows asset은 NSIS PE executable과 x64 MSI installer 형식을 확인했습니다.
+
+### Production
+
+- `https://share.dlfkd.dev/health`: version `0.2.0`, `fileStorage: false`
+- HTTPS, API, WSS, share registration/presence/cleanup 실제 검증 PASS
+- 허용되지 않은 WebSocket Origin은 code `1008`, `origin not allowed`로 차단
+- CSP, MIME, frame, referrer, permissions, noindex response header 확인
+- 공개 랜딩의 JS/CSS asset HTTP 200과 immutable cache 확인
+- 브라우저 1280 px viewport에서 `scrollWidth === innerWidth` 확인
+- 이전 runtime bundle은 local rollback backup으로 보존
 
 ## 남은 검증 범위
 
@@ -104,21 +118,22 @@ open /Applications/DirectDrop.app
 - 1 GiB 이상, 느린 디스크, sleep/wake, 장시간 재연결 soak
 - Windows 설치·제거와 SmartScreen 실제 화면
 - Chrome/Edge/Safari/Firefox Share Link 실제 대용량 저장
-- GitHub 공개 release asset과 production deploy 후 보안 header/Origin 정책
+- 서로 다른 네트워크와 브라우저 환경의 장기 운영 관찰
 
 이 항목들은 구현 누락을 뜻하지 않으며, 현재 로컬 검증을 넘어서는 release/physical evidence입니다.
 
 ## Release Gate
 
-| Gate                              | 상태                     |
-| --------------------------------- | ------------------------ |
-| CRITICAL/HIGH = 0                 | PASS                     |
-| Workspace/Rust 자동 검증          | PASS                     |
-| 실제 Nearby mDNS→TLS→전송→hash    | PASS                     |
-| macOS arm64 local release app     | PASS                     |
-| 현재 commit GitHub CI             | PUSH 후 확인             |
-| Intel macOS/Windows artifact      | Release workflow 후 확인 |
-| 운영 `share.dlfkd.dev` v0.2.0     | 배포 후 확인             |
-| Developer ID signing/notarization | 사용자 요청에 따라 제외  |
+| Gate                              | 상태                    |
+| --------------------------------- | ----------------------- |
+| CRITICAL/HIGH = 0                 | PASS                    |
+| Workspace/Rust 자동 검증          | PASS                    |
+| 실제 Nearby mDNS→TLS→전송→hash    | PASS                    |
+| macOS arm64 local release app     | PASS                    |
+| 현재 commit GitHub CI             | PASS                    |
+| ARM/Intel macOS/Windows artifact  | PASS                    |
+| 공개 SHA256/DMG/installer 검증    | PASS                    |
+| 운영 `share.dlfkd.dev` v0.2.0     | PASS                    |
+| Developer ID signing/notarization | 사용자 요청에 따라 제외 |
 
-**판정: 코드와 로컬 Nearby 핵심 경로는 릴리스 준비 완료. 원격 CI·artifact·운영 배포 검증을 이어서 수행한다.**
+**최종 판정: DirectDrop v0.2.0 릴리스와 운영 배포 완료. Developer ID 서명·공증만 요청 범위에서 제외.**
