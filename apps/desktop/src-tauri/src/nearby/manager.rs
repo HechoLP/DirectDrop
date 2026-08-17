@@ -43,6 +43,9 @@ const PAIRING_TIMEOUT: Duration = Duration::from_secs(120);
 const TRANSFER_DECISION_TIMEOUT: Duration = Duration::from_secs(120);
 const MAX_CONCURRENT_CONNECTIONS: usize = 16;
 const MAX_CONNECTIONS_PER_IP_PER_MINUTE: usize = 60;
+const MAX_DISCOVERED_DEVICES: usize = 256;
+const MAX_DISCOVERY_SERVICE_NAMES: usize = 512;
+const MAX_TRANSFER_HISTORY: usize = 200;
 const RESUME_APPROVAL_TTL: Duration = Duration::from_secs(5 * 60);
 const MAX_RESUME_APPROVALS: usize = 128;
 
@@ -1531,13 +1534,20 @@ impl NearbyManager {
                     paired,
                     last_seen: now_millis(),
                 };
-                if let Ok(mut names) = self.inner.service_names.write() {
-                    names.insert(info.get_fullname().to_owned(), device.device_id.clone());
+                if let (Ok(mut names), Ok(mut devices)) =
+                    (self.inner.service_names.write(), self.inner.devices.write())
+                {
+                    if insert_discovered_device(
+                        &mut devices,
+                        &mut names,
+                        info.get_fullname(),
+                        device,
+                    ) {
+                        drop(devices);
+                        drop(names);
+                        self.emit_devices();
+                    }
                 }
-                if let Ok(mut devices) = self.inner.devices.write() {
-                    devices.insert(device.device_id.clone(), device);
-                }
-                self.emit_devices();
             }
             ServiceEvent::ServiceRemoved(_, fullname) => {
                 let device_id = self
@@ -1719,12 +1729,16 @@ impl NearbyManager {
 
     fn set_transfer_status(&self, transfer_id: &str, status: &str, error: Option<String>) {
         let snapshot = if let Ok(mut transfers) = self.inner.transfers.write() {
-            transfers.get_mut(transfer_id).map(|snapshot| {
+            let updated = transfers.get_mut(transfer_id).map(|snapshot| {
                 snapshot.status = status.to_owned();
                 snapshot.error = error;
                 snapshot.updated_at = now_millis();
                 snapshot.clone()
-            })
+            });
+            if matches!(status, "COMPLETED" | "FAILED" | "CANCELLED") {
+                prune_terminal_transfers(&mut transfers);
+            }
+            updated
         } else {
             None
         };
@@ -1771,7 +1785,7 @@ impl NearbyManager {
             .cloned()
             .collect::<Vec<_>>();
         history.sort_by_key(|snapshot| std::cmp::Reverse(snapshot.updated_at));
-        history.truncate(200);
+        history.truncate(MAX_TRANSFER_HISTORY);
         if let Ok(payload) = serde_json::to_vec_pretty(&history) {
             let mut options = std::fs::OpenOptions::new();
             options.create(true).truncate(true).write(true);
@@ -1825,11 +1839,65 @@ fn load_transfer_history(
             && (snapshot.status != "COMPLETED"
                 || snapshot.transferred_bytes == snapshot.total_bytes)
     });
-    history.truncate(200);
+    history.truncate(MAX_TRANSFER_HISTORY);
     Ok(history
         .into_iter()
         .map(|snapshot| (snapshot.id.clone(), snapshot))
         .collect())
+}
+
+fn insert_discovered_device(
+    devices: &mut HashMap<String, NearbyDevice>,
+    service_names: &mut HashMap<String, String>,
+    fullname: &str,
+    device: NearbyDevice,
+) -> bool {
+    if !devices.contains_key(&device.device_id) && devices.len() >= MAX_DISCOVERED_DEVICES {
+        let Some(evicted_id) = devices
+            .values()
+            .filter(|candidate| !candidate.paired)
+            .min_by_key(|candidate| candidate.last_seen)
+            .map(|candidate| candidate.device_id.clone())
+        else {
+            return false;
+        };
+        devices.remove(&evicted_id);
+        service_names.retain(|_, device_id| device_id != &evicted_id);
+    }
+
+    if !service_names.contains_key(fullname) && service_names.len() >= MAX_DISCOVERY_SERVICE_NAMES {
+        if let Some(stale_name) = service_names
+            .iter()
+            .find(|(_, device_id)| !devices.contains_key(*device_id))
+            .map(|(name, _)| name.clone())
+            .or_else(|| service_names.keys().next().cloned())
+        {
+            service_names.remove(&stale_name);
+        }
+    }
+    service_names.insert(fullname.to_owned(), device.device_id.clone());
+    devices.insert(device.device_id.clone(), device);
+    true
+}
+
+fn prune_terminal_transfers(transfers: &mut HashMap<String, NearbyTransferSnapshot>) {
+    let mut terminal = transfers
+        .values()
+        .filter(|snapshot| {
+            matches!(
+                snapshot.status.as_str(),
+                "COMPLETED" | "FAILED" | "CANCELLED"
+            )
+        })
+        .map(|snapshot| (snapshot.id.clone(), snapshot.updated_at))
+        .collect::<Vec<_>>();
+    if terminal.len() <= MAX_TRANSFER_HISTORY {
+        return;
+    }
+    terminal.sort_by_key(|(_, updated_at)| std::cmp::Reverse(*updated_at));
+    for (transfer_id, _) in terminal.into_iter().skip(MAX_TRANSFER_HISTORY) {
+        transfers.remove(&transfer_id);
+    }
 }
 
 fn parse_challenge(
@@ -2050,6 +2118,92 @@ mod tests {
             "Mac",
             &"z".repeat(64)
         ));
+    }
+
+    #[test]
+    fn discovery_flood_cannot_grow_device_or_service_maps_without_bound() {
+        let mut devices = HashMap::new();
+        let mut service_names = HashMap::new();
+        for index in 0..(MAX_DISCOVERED_DEVICES + 32) {
+            let device = NearbyDevice {
+                device_id: format!("device-{index:08}"),
+                device_name: format!("Device {index}"),
+                platform: "test".to_owned(),
+                address: "192.168.1.10".to_owned(),
+                port: 8788,
+                protocol_version: LAN_PROTOCOL_VERSION,
+                certificate_fingerprint: "a".repeat(64),
+                paired: index == 0,
+                last_seen: index as u64,
+            };
+            assert!(insert_discovered_device(
+                &mut devices,
+                &mut service_names,
+                &format!("service-{index}"),
+                device,
+            ));
+        }
+        assert_eq!(devices.len(), MAX_DISCOVERED_DEVICES);
+        assert!(devices.contains_key("device-00000000"));
+
+        let existing = devices["device-00000000"].clone();
+        for index in 0..(MAX_DISCOVERY_SERVICE_NAMES + 32) {
+            assert!(insert_discovered_device(
+                &mut devices,
+                &mut service_names,
+                &format!("alias-{index}"),
+                existing.clone(),
+            ));
+        }
+        assert!(service_names.len() <= MAX_DISCOVERY_SERVICE_NAMES);
+    }
+
+    #[test]
+    fn terminal_transfer_history_is_pruned_in_memory() {
+        let mut transfers = HashMap::new();
+        for index in 0..(MAX_TRANSFER_HISTORY + 10) {
+            let id = format!("transfer-{index:08}");
+            transfers.insert(
+                id.clone(),
+                NearbyTransferSnapshot {
+                    id,
+                    device_id: "device-12345678".to_owned(),
+                    device_name: "Trusted Mac".to_owned(),
+                    direction: "RECEIVE".to_owned(),
+                    files: Vec::new(),
+                    total_bytes: 0,
+                    transferred_bytes: 0,
+                    bytes_per_second: 0,
+                    eta_seconds: None,
+                    status: "COMPLETED".to_owned(),
+                    error: None,
+                    updated_at: index as u64,
+                },
+            );
+        }
+        transfers.insert(
+            "active-transfer".to_owned(),
+            NearbyTransferSnapshot {
+                id: "active-transfer".to_owned(),
+                device_id: "device-12345678".to_owned(),
+                device_name: "Trusted Mac".to_owned(),
+                direction: "SEND".to_owned(),
+                files: Vec::new(),
+                total_bytes: 1,
+                transferred_bytes: 0,
+                bytes_per_second: 0,
+                eta_seconds: None,
+                status: "TRANSFERRING".to_owned(),
+                error: None,
+                updated_at: 0,
+            },
+        );
+
+        prune_terminal_transfers(&mut transfers);
+        assert_eq!(transfers.len(), MAX_TRANSFER_HISTORY + 1);
+        assert!(transfers.contains_key("active-transfer"));
+        assert!(!transfers.contains_key("transfer-00000000"));
+        assert!(transfers.contains_key(&format!("transfer-{:08}", MAX_TRANSFER_HISTORY + 9)));
     }
 
     #[tokio::test]

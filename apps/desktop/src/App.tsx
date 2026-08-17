@@ -93,6 +93,7 @@ import {
   type NearbyTransferOffer,
   type NearbyTransferSnapshot,
 } from "./tauri";
+import { mergeNearbyTransferList } from "./nearby-transfer-state";
 
 const apiBase =
   import.meta.env.VITE_PUBLIC_APP_URL ??
@@ -209,9 +210,7 @@ export function App() {
   const mergeNearbyTransfer = useCallback(
     (snapshot: NearbyTransferSnapshot) => {
       setNearbyTransfers((current) =>
-        [snapshot, ...current.filter((item) => item.id !== snapshot.id)].sort(
-          (left, right) => right.updatedAt - left.updatedAt,
-        ),
+        mergeNearbyTransferList(current, snapshot),
       );
       if (["COMPLETED", "FAILED", "CANCELLED"].includes(snapshot.status)) {
         setNearbyOffer((current) =>
@@ -288,8 +287,26 @@ export function App() {
 
   const stopShare = useCallback(async () => {
     const activeShare = shareRef.current;
-    if (!activeShare) return;
+    if (!activeShare) return true;
     const activeFiles = filesRef.current;
+    try {
+      const response = await fetch(
+        `${apiBase}/api/shares/${activeShare.token}`,
+        {
+          method: "DELETE",
+          headers: { authorization: `Bearer ${activeShare.controlKey}` },
+          signal: AbortSignal.timeout(10_000),
+        },
+      );
+      if (!response.ok && response.status !== 404)
+        throw new Error(`HTTP_${response.status}`);
+    } catch {
+      setOnline(false);
+      setError(
+        "서버에 연결하지 못해 공유 링크를 종료하지 못했습니다. 네트워크 연결 후 다시 시도해 주세요.",
+      );
+      return false;
+    }
     send({
       type: "UNREGISTER_SHARE",
       shareToken: activeShare.token,
@@ -313,13 +330,10 @@ export function App() {
     setShowQr(false);
     setShareView("upload");
     setSendStage("files");
-    await Promise.all([
-      fetch(`${apiBase}/api/shares/${activeShare.token}`, {
-        method: "DELETE",
-        headers: { authorization: `Bearer ${activeShare.controlKey}` },
-      }).catch(() => undefined),
-      removeLocalFiles(activeFiles.map((file) => file.id)),
-    ]);
+    await removeLocalFiles(activeFiles.map((file) => file.id)).catch(() =>
+      setError("공유는 종료했지만 로컬 목록을 정리하지 못했습니다."),
+    );
+    return true;
   }, [send]);
 
   useEffect(() => {
@@ -358,8 +372,21 @@ export function App() {
         window.confirm(
           "진행 중인 공유 또는 Nearby 전송이 있습니다. 종료하면 연결이 끊깁니다. 종료할까요?",
         )
-      )
-        void quitApp();
+      ) {
+        void (async () => {
+          if (shareRef.current) {
+            const stopped = await stopShare();
+            if (
+              !stopped &&
+              !window.confirm(
+                "공유 링크를 서버에서 종료하지 못했습니다. 만료 시간까지 파일 이름이 링크에 남을 수 있습니다. 그래도 종료할까요?",
+              )
+            )
+              return;
+          }
+          await quitApp();
+        })();
+      }
     }).then((unlisten) => {
       if (disposed) unlisten();
       else cleanups.push(unlisten);

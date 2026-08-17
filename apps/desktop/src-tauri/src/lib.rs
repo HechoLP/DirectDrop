@@ -382,6 +382,10 @@ fn set_active_share_count(count: usize, state: State<'_, AppState>) {
     state.active_shares.store(count, Ordering::Relaxed);
 }
 
+fn should_confirm_user_exit(exit_code: Option<i32>, active_share_count: usize) -> bool {
+    exit_code.is_none() && active_share_count > 0
+}
+
 #[tauri::command]
 fn quit_app(app: AppHandle, nearby: State<'_, NearbyManager>) {
     let _ = nearby.stop();
@@ -576,7 +580,7 @@ fn initialize_database(path: PathBuf) -> Result<Connection, Box<dyn std::error::
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() -> Result<(), tauri::Error> {
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(
@@ -671,7 +675,20 @@ pub fn run() -> Result<(), tauri::Error> {
             nearby_cancel_transfer,
             nearby_transfers
         ])
-        .run(tauri::generate_context!())
+        .build(tauri::generate_context!())?;
+    app.run(|app_handle, event| {
+        if let tauri::RunEvent::ExitRequested { code, api, .. } = event {
+            let active_share_count = app_handle
+                .state::<AppState>()
+                .active_shares
+                .load(Ordering::Acquire);
+            if should_confirm_user_exit(code, active_share_count) {
+                api.prevent_exit();
+                let _ = app_handle.emit("quit-requested", ());
+            }
+        }
+    });
+    Ok(())
 }
 
 #[cfg(test)]
@@ -718,6 +735,13 @@ mod tests {
         );
         assert_eq!(std::fs::read(&source_path).unwrap(), b"original data");
         std::fs::remove_file(source_path).unwrap();
+    }
+
+    #[test]
+    fn native_user_quit_is_intercepted_only_while_work_is_active() {
+        assert!(should_confirm_user_exit(None, 1));
+        assert!(!should_confirm_user_exit(None, 0));
+        assert!(!should_confirm_user_exit(Some(0), 1));
     }
 
     #[test]
