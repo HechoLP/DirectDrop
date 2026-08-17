@@ -16,6 +16,8 @@ DirectDrop은 클라우드에 파일을 올리지 않고 기기에서 기기로 
 
 같은 Wi-Fi 또는 Ethernet의 DirectDrop 기기를 mDNS로 찾고 인터넷 없이 직접 전송합니다. 최초 연결은 양쪽의 6자리 코드를 확인하며, 이후에는 인증서 fingerprint와 영구 신뢰 키로 기기를 인증합니다. 파일·폴더 데이터는 인증서 고정 TLS 연결로만 이동합니다. 자세한 프로토콜과 보안 경계는 [Nearby LAN Share 문서](docs/nearby.md)를 참고하세요.
 
+> **Nearby 사용 조건:** 보내는 기기와 받는 기기 모두에 DirectDrop v0.2.0 이상이 설치되어 있고 앱이 실행 중이어야 합니다. 같은 로컬 네트워크에 연결된 데스크톱 앱끼리만 검색되며, 브라우저만으로는 Nearby를 사용할 수 없습니다. 수신자 앱 설치 없이 보내려면 `DirectDrop · Share Link`를 사용하세요.
+
 ## 핵심 기능
 
 - WebRTC RTCDataChannel 기반 직접 P2P 파일 전송
@@ -59,7 +61,7 @@ Cloudflare Tunnel은 Share Link의 랜딩 페이지, API, WebSocket signaling만
 ## 요구 사항과 제한
 
 - 송신자의 DirectDrop 앱이 온라인이어야 합니다.
-- Nearby는 양쪽에 DirectDrop v0.2.0 이상이 설치되어 있고 같은 IPv4 사설/링크 로컬 네트워크에 있어야 합니다.
+- Nearby는 양쪽 기기에 DirectDrop v0.2.0 이상이 설치·실행되어 있고 같은 IPv4 사설/링크 로컬 네트워크에 있어야 합니다. 브라우저는 Nearby 기기로 검색되지 않습니다.
 - macOS에서는 로컬 네트워크 접근을 허용하고, Windows 방화벽에서는 DirectDrop을 `Private network`에만 허용하세요.
 - VPN·게스트 Wi-Fi·AP isolation이 기기 간 통신이나 mDNS를 차단하면 Nearby 검색이 되지 않을 수 있습니다.
 - 기본 구성은 STUN을 사용하는 Direct P2P 전용입니다. 일부 NAT·방화벽 환경에서는 연결이 실패할 수 있습니다.
