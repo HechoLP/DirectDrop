@@ -4,8 +4,8 @@
 :root {
   font-family:
     "Noto Sans KR", "Apple SD Gothic Neo", Pretendard, system-ui, sans-serif;
-  color: #0f172a;
-  background: #f8fafc;
+  color: #ffffff;
+  background: #050505;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
 }
@@ -15,7 +15,7 @@
 }
 html {
   min-width: 320px;
-  background: #f8fafc;
+  background: #050505;
   scroll-behavior: smooth;
 }
 body {
@@ -59,6 +59,14 @@ summary:focus-visible {
 }
 .tabular {
   font-variant-numeric: tabular-nums;
+}
+.dd-dark-grid {
+  background-color: #050505;
+  background-image:
+    linear-gradient(rgb(255 255 255 / 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(255 255 255 / 0.035) 1px, transparent 1px);
+  background-position: center top;
+  background-size: 56px 56px;
 }
 
 @media (prefers-reduced-motion: reduce) {
