@@ -52,6 +52,9 @@ describe("DirectDrop API", () => {
     expect(response.headers["cache-control"]).toBe("no-store");
     expect(response.headers["x-content-type-options"]).toBe("nosniff");
     expect(response.headers["x-frame-options"]).toBe("DENY");
+    expect(response.headers["strict-transport-security"]).toBe(
+      "max-age=31536000",
+    );
     expect(response.headers["x-robots-tag"]).toBe(
       "noindex, nofollow, noarchive",
     );
@@ -175,5 +178,73 @@ describe("DirectDrop API", () => {
     });
     expect(lookup.statusCode).toBe(404);
     expect(lookup.json()).toEqual({ error: "SHARE_NOT_FOUND" });
+  });
+
+  it("keeps rate-limit buckets separate behind the trusted loopback proxy", async () => {
+    const app = await testApp();
+    for (let index = 0; index < 90; index += 1) {
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/shares/missing-token",
+        headers: { "x-forwarded-for": "198.51.100.10" },
+      });
+      expect(response.statusCode).toBe(404);
+    }
+    const limited = await app.inject({
+      method: "GET",
+      url: "/api/shares/missing-token",
+      headers: { "x-forwarded-for": "198.51.100.10" },
+    });
+    expect(limited.statusCode).toBe(429);
+
+    const otherUser = await app.inject({
+      method: "GET",
+      url: "/api/shares/missing-token",
+      headers: { "x-forwarded-for": "198.51.100.11" },
+    });
+    expect(otherUser.statusCode).toBe(404);
+  });
+
+  it("hides file metadata and refuses new grants after a share expires", async () => {
+    const app = await testApp();
+    const created = app.directDrop.store.createShare(
+      {
+        files: [
+          {
+            id: "private-file-1",
+            name: "confidential-plan.pdf",
+            size: 42,
+            mimeType: "application/pdf",
+          },
+        ],
+        downloadLimit: 1,
+        expiresAt: new Date(Date.now() - 1_000).toISOString(),
+        appLifetime: false,
+        password: "correct horse battery staple",
+        approvalMode: "AUTO",
+        allowRelay: false,
+      },
+      "$argon2id$v=19$m=19456,t=2,p=1$invalid-for-expired-check",
+    );
+
+    const lookup = await app.inject({
+      method: "GET",
+      url: `/api/shares/${created.token}`,
+    });
+    expect(lookup.statusCode).toBe(200);
+    expect(lookup.json()).toMatchObject({
+      status: "EXPIRED",
+      files: [],
+      totalSize: 0,
+    });
+    expect(lookup.body).not.toContain("confidential-plan.pdf");
+
+    const verify = await app.inject({
+      method: "POST",
+      url: `/api/shares/${created.token}/verify`,
+      payload: { password: "correct horse battery staple" },
+    });
+    expect(verify.statusCode).toBe(410);
+    expect(verify.json()).toEqual({ error: "SHARE_UNAVAILABLE" });
   });
 });

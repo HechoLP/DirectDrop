@@ -11,12 +11,16 @@ import { secureToken } from "./token.js";
 
 type Peer = {
   id: string;
+  clientIp: string;
   socket: WebSocket;
   joinedShares: Set<string>;
   registeredShares: Set<string>;
   downloadRequestTimes: number[];
   messageTimes: number[];
 };
+
+export const MAX_ACTIVE_SIGNALING_CONNECTIONS = 1_000;
+export const MAX_ACTIVE_SIGNALING_CONNECTIONS_PER_IP = 16;
 
 export class SignalingHub {
   readonly peers = new Map<string, Peer>();
@@ -37,9 +41,20 @@ export class SignalingHub {
     private readonly reservationTimeoutMs: number,
   ) {}
 
-  add(socket: WebSocket) {
+  add(socket: WebSocket, clientIp: string) {
+    const connectionsForIp = [...this.peers.values()].filter(
+      (peer) => peer.clientIp === clientIp,
+    ).length;
+    if (
+      this.peers.size >= MAX_ACTIVE_SIGNALING_CONNECTIONS ||
+      connectionsForIp >= MAX_ACTIVE_SIGNALING_CONNECTIONS_PER_IP
+    ) {
+      socket.close(1013, "signaling capacity reached");
+      return undefined;
+    }
     const peer: Peer = {
       id: secureToken(12),
+      clientIp,
       socket,
       joinedShares: new Set(),
       registeredShares: new Set(),

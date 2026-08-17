@@ -481,16 +481,22 @@ export class DirectDropStore {
     return (
       this.db
         .prepare(
-          "SELECT COUNT(*) AS count FROM shares WHERE status IN ('EXPIRED','STOPPED')",
+          `SELECT COUNT(*) AS count FROM shares
+           WHERE status IN ('EXPIRED','STOPPED')
+              OR (expires_at IS NOT NULL AND expires_at <= ?)`,
         )
-        .get() as { count: number }
+        .get(new Date().toISOString()) as { count: number }
     ).count;
   }
 
   cleanupMetadata(): number {
     const result = this.db
-      .prepare("DELETE FROM shares WHERE status IN ('EXPIRED','STOPPED')")
-      .run();
+      .prepare(
+        `DELETE FROM shares
+         WHERE status IN ('EXPIRED','STOPPED')
+            OR (expires_at IS NOT NULL AND expires_at <= ?)`,
+      )
+      .run(new Date().toISOString());
     return result.changes;
   }
 }

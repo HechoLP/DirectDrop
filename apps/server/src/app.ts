@@ -19,6 +19,7 @@ import { secureToken } from "./token.js";
 
 type AccessGrant = { shareId: string; expiresAt: number };
 const ROUTE_TOKEN_PATTERN = /^[A-Za-z0-9_-]{8,128}$/;
+const TRUSTED_REVERSE_PROXIES = ["127.0.0.1", "::1"];
 
 export function robotsDirective(
   url: string,
@@ -45,13 +46,14 @@ function metadata(
     share.completedDownloads >= share.downloadLimit
   )
     status = "LIMIT_REACHED";
+  const exposesFiles =
+    unlocked && !["EXPIRED", "STOPPED", "LIMIT_REACHED"].includes(status);
   return {
     token: share.token,
-    files: share.passwordHash && !unlocked ? [] : share.files,
-    totalSize:
-      share.passwordHash && !unlocked
-        ? 0
-        : share.files.reduce((total, file) => total + file.size, 0),
+    files: exposesFiles ? share.files : [],
+    totalSize: exposesFiles
+      ? share.files.reduce((total, file) => total + file.size, 0)
+      : 0,
     expiresAt: share.expiresAt,
     downloadLimit: share.downloadLimit,
     completedDownloads: share.completedDownloads,
@@ -72,6 +74,10 @@ export async function buildApp(
     logger: process.env.NODE_ENV !== "test",
     logController: new LogController({ disableRequestLogging: true }),
     bodyLimit: 1024 * 1024,
+    // The production server is loopback-only behind cloudflared. Trust only
+    // that immediate proxy hop so per-IP rate limits cannot collapse every
+    // public user into 127.0.0.1 or be spoofed by a direct remote client.
+    trustProxy: TRUSTED_REVERSE_PROXIES,
   });
   const grants = new Map<string, AccessGrant>();
   const grantTimers = new Map<string, NodeJS.Timeout>();
@@ -80,6 +86,7 @@ export async function buildApp(
     reply
       .header("x-content-type-options", "nosniff")
       .header("referrer-policy", "no-referrer")
+      .header("strict-transport-security", "max-age=31536000")
       .header("permissions-policy", "camera=(), microphone=(), geolocation=()")
       .header("x-frame-options", "DENY")
       .header(
@@ -206,6 +213,12 @@ export async function buildApp(
         return reply.code(404).send({ error: "SHARE_NOT_FOUND" });
       const share = store.getShareByToken(request.params.token);
       if (!share) return reply.code(404).send({ error: "SHARE_NOT_FOUND" });
+      if (
+        share.status !== "ACTIVE" ||
+        (share.downloadLimit !== null &&
+          share.completedDownloads >= share.downloadLimit)
+      )
+        return reply.code(410).send({ error: "SHARE_UNAVAILABLE" });
       if (!share.passwordHash) return reply.send({ accessToken: null });
       if (
         typeof request.body?.password !== "string" ||
@@ -253,7 +266,7 @@ export async function buildApp(
         socket.close(1008, "origin not allowed");
         return;
       }
-      hub.add(socket);
+      hub.add(socket, request.ip);
     },
   );
 

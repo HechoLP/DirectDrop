@@ -5,6 +5,7 @@ import type { ServerMessage } from "@directdrop/protocol";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { DirectDropStore } from "../src/store.js";
+import { MAX_ACTIVE_SIGNALING_CONNECTIONS_PER_IP } from "../src/signaling.js";
 
 type TestClient = {
   socket: WebSocket;
@@ -282,5 +283,26 @@ describe("WebSocket signaling", () => {
     });
     expect(code).toBe(1008);
     expect(app.directDrop.hub.peers.size).toBe(0);
+  });
+
+  it("caps long-lived signaling connections from one client address", async () => {
+    const { app, url } = await signalingApp();
+    const clients = await Promise.all(
+      Array.from(
+        { length: MAX_ACTIVE_SIGNALING_CONNECTIONS_PER_IP },
+        () => connect(url),
+      ),
+    );
+    await Promise.all(clients.map((client) => client.next("CONNECTED")));
+
+    const overflow = new WebSocket(url);
+    const code = await new Promise<number>((resolve, reject) => {
+      overflow.once("close", resolve);
+      overflow.once("error", reject);
+    });
+    expect(code).toBe(1013);
+    expect(app.directDrop.hub.peers.size).toBe(
+      MAX_ACTIVE_SIGNALING_CONNECTIONS_PER_IP,
+    );
   });
 });

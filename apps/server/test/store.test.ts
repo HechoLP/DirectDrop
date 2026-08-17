@@ -107,6 +107,19 @@ describe("DirectDropStore", () => {
     expect(store.countCleanupCandidates()).toBe(1);
   });
 
+  it("deletes elapsed metadata even when it was never looked up", () => {
+    const created = store.createShare(
+      { ...baseShare, expiresAt: new Date(Date.now() - 1000).toISOString() },
+      null,
+    );
+    expect(store.countCleanupCandidates()).toBe(1);
+    expect(store.cleanupMetadata()).toBe(1);
+    expect(store.getShareByToken(created.token)).toBeNull();
+    expect(
+      store.db.prepare("SELECT COUNT(*) AS count FROM share_files").get(),
+    ).toEqual({ count: 0 });
+  });
+
   it("migrates legacy session tables without losing rows", () => {
     const directory = mkdtempSync(join(tmpdir(), "directdrop-migration-"));
     const databasePath = join(directory, "legacy.sqlite3");
