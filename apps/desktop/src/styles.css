@@ -48,6 +48,36 @@ body {
   background: var(--dd-bg);
 }
 
+.dd-fatal-error {
+  display: grid;
+  width: min(100% - 40px, 520px);
+  min-height: 100%;
+  margin: 0 auto;
+  place-content: center;
+  gap: 12px;
+  color: var(--dd-text);
+  text-align: center;
+}
+
+.dd-fatal-error strong {
+  font-size: 20px;
+}
+
+.dd-fatal-error p {
+  margin: 0;
+  color: var(--dd-muted);
+  overflow-wrap: anywhere;
+}
+
+.dd-fatal-error button {
+  min-height: 44px;
+  cursor: pointer;
+  border: 0;
+  border-radius: 9px;
+  color: #071008;
+  background: var(--dd-green);
+}
+
 button,
 input,
 select {
@@ -550,6 +580,40 @@ button {
   gap: 7px;
   color: #6f7976;
   font-size: 11px;
+}
+
+.dd-drop-container {
+  position: relative;
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+.dd-drop-container .dd-drop-zone {
+  width: 100%;
+}
+
+.dd-folder-action {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  display: inline-flex;
+  min-height: 38px;
+  cursor: pointer;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--dd-border-strong);
+  border-radius: 8px;
+  padding: 0 12px;
+  color: var(--dd-secondary);
+  background: var(--dd-panel-raised);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.dd-folder-action:hover {
+  color: var(--dd-text);
+  border-color: var(--dd-green-border);
 }
 
 .dd-selected-panel,
@@ -1104,7 +1168,19 @@ button {
 }
 
 .dd-nearby-page {
+  display: flex;
+  height: 100%;
+  min-height: 0;
   max-width: 880px;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.dd-nearby-page > .dd-back-button,
+.dd-nearby-page > .dd-flow-heading,
+.dd-nearby-page > .dd-nearby-summary,
+.dd-nearby-page > .dd-nearby-transfers {
+  flex: 0 0 auto;
 }
 
 .dd-nearby-summary {
@@ -1137,6 +1213,10 @@ button {
 }
 
 .dd-device-browser {
+  display: flex;
+  min-height: 175px;
+  flex: 1 1 auto;
+  flex-direction: column;
   overflow: hidden;
 }
 
@@ -1160,12 +1240,104 @@ button {
 
 .dd-device-placeholder {
   display: flex;
-  min-height: 250px;
+  min-height: 150px;
+  flex: 1;
   align-items: center;
   justify-content: center;
   flex-direction: column;
   padding: 28px;
   text-align: center;
+}
+
+.dd-device-grid {
+  display: grid;
+  min-height: 150px;
+  grid-template-columns: repeat(auto-fit, minmax(225px, 1fr));
+  gap: 10px;
+  overflow: auto;
+  padding: 14px;
+}
+
+.dd-device-card {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--dd-border);
+  border-radius: 10px;
+  padding: 11px;
+  background: var(--dd-panel-raised);
+}
+
+.dd-device-card-icon {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  place-items: center;
+  border-radius: 9px;
+  color: var(--dd-green);
+  background: var(--dd-green-soft);
+}
+
+.dd-device-card-copy {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  gap: 2px;
+}
+
+.dd-device-card-copy strong,
+.dd-device-card-copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dd-device-card-copy strong {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.dd-device-card-copy small {
+  color: var(--dd-muted);
+  font-size: 9px;
+}
+
+.dd-device-card-copy small.is-trusted {
+  color: var(--dd-green);
+}
+
+.dd-device-card > button,
+.dd-nearby-transfer-actions button {
+  display: inline-flex;
+  min-height: 34px;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid var(--dd-green-border);
+  border-radius: 8px;
+  padding: 0 10px;
+  color: var(--dd-green);
+  background: var(--dd-green-soft);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.dd-device-card > button:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.dd-spin {
+  animation: dd-spin 900ms linear infinite;
+}
+
+@keyframes dd-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .dd-device-placeholder > span {
@@ -1224,6 +1396,92 @@ button {
 .dd-nearby-offline-note span {
   color: var(--dd-muted);
   font-size: 10px;
+}
+
+.dd-nearby-transfers {
+  max-height: 210px;
+  margin-top: 13px;
+  overflow: hidden;
+  border: 1px solid var(--dd-border);
+  border-radius: 10px;
+  background: #0d1011;
+}
+
+.dd-nearby-transfers > div {
+  overflow: auto;
+}
+
+.dd-nearby-transfers > header,
+.dd-nearby-transfer-title,
+.dd-nearby-transfer-meta,
+.dd-nearby-transfer-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.dd-nearby-transfers > header {
+  min-height: 45px;
+  padding: 0 14px;
+  border-bottom: 1px solid var(--dd-border);
+}
+
+.dd-nearby-transfers h3 {
+  margin: 0;
+  font-size: 13px;
+}
+
+.dd-nearby-transfers > header > span {
+  color: var(--dd-muted);
+  font-size: 10px;
+}
+
+.dd-nearby-transfer {
+  display: grid;
+  gap: 9px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--dd-border);
+}
+
+.dd-nearby-transfer:last-child {
+  border-bottom: 0;
+}
+
+.dd-nearby-transfer-title > span:first-child {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.dd-nearby-transfer-title strong {
+  font-size: 12px;
+}
+
+.dd-nearby-transfer-title small,
+.dd-nearby-transfer-meta,
+.dd-nearby-transfer > p {
+  color: var(--dd-muted);
+  font-size: 10px;
+}
+
+.dd-nearby-transfer-meta {
+  font-variant-numeric: tabular-nums;
+}
+
+.dd-nearby-transfer > p {
+  margin: 0;
+  color: var(--dd-danger);
+}
+
+.dd-nearby-transfer-actions {
+  justify-content: flex-end;
+}
+
+.dd-nearby-transfer-actions button:last-child {
+  border-color: rgba(255, 107, 114, 0.35);
+  color: var(--dd-danger);
+  background: rgba(255, 107, 114, 0.06);
 }
 
 .dd-send-device {
@@ -1689,6 +1947,144 @@ button {
   color: var(--dd-secondary);
 }
 
+.dd-nearby-settings {
+  display: grid;
+  gap: 12px;
+  margin-top: 20px;
+  border: 1px solid var(--dd-border);
+  border-radius: 10px;
+  padding: 14px;
+  background: #0d1011;
+}
+
+.dd-nearby-settings > header,
+.dd-nearby-settings > header > span,
+.dd-nearby-settings > header > label,
+.dd-trusted-devices li {
+  display: flex;
+  align-items: center;
+}
+
+.dd-nearby-settings > header {
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.dd-nearby-settings > header > span,
+.dd-nearby-settings > header > label {
+  gap: 8px;
+}
+
+.dd-nearby-settings > header > span {
+  color: var(--dd-green);
+}
+
+.dd-nearby-settings > header > span strong {
+  color: var(--dd-text);
+  font-size: 13px;
+}
+
+.dd-nearby-settings > header > label {
+  color: var(--dd-muted);
+  font-size: 10px;
+}
+
+.dd-nearby-settings > label {
+  display: grid;
+  gap: 6px;
+  color: var(--dd-secondary);
+  font-size: 10px;
+}
+
+.dd-nearby-settings > label > input {
+  width: 100%;
+  min-height: 40px;
+  border: 1px solid var(--dd-border-strong);
+  border-radius: 8px;
+  padding: 0 11px;
+  color: var(--dd-text);
+  background: var(--dd-panel);
+  font-size: 12px;
+}
+
+.dd-nearby-settings > button {
+  min-height: 40px;
+  cursor: pointer;
+  border: 1px solid var(--dd-green-border);
+  border-radius: 8px;
+  color: #071008;
+  background: var(--dd-green);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.dd-trusted-devices {
+  padding-top: 11px;
+  border-top: 1px solid var(--dd-border);
+}
+
+.dd-trusted-devices > strong {
+  color: var(--dd-secondary);
+  font-size: 10px;
+}
+
+.dd-trusted-devices ul {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+}
+
+.dd-trusted-devices li {
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+}
+
+.dd-trusted-devices li > span {
+  display: grid;
+  gap: 2px;
+}
+
+.dd-trusted-devices li strong {
+  color: var(--dd-secondary);
+  font-size: 11px;
+}
+
+.dd-trusted-devices li small {
+  color: var(--dd-muted);
+  font-size: 9px;
+}
+
+.dd-trusted-device-actions {
+  display: flex !important;
+  align-items: center;
+  gap: 8px !important;
+}
+
+.dd-trusted-device-actions label {
+  display: inline-flex;
+  cursor: pointer;
+  align-items: center;
+  gap: 4px;
+  color: var(--dd-muted);
+  font-size: 9px;
+}
+
+.dd-trusted-device-actions input {
+  accent-color: var(--dd-green);
+}
+
+.dd-trusted-devices li button {
+  min-height: 32px;
+  cursor: pointer;
+  border: 1px solid rgba(255, 107, 114, 0.28);
+  border-radius: 7px;
+  padding: 0 9px;
+  color: var(--dd-danger);
+  background: rgba(255, 107, 114, 0.05);
+  font-size: 9px;
+}
+
 .dd-alert {
   display: flex;
   max-width: 1120px;
@@ -1729,6 +2125,64 @@ button {
   background: #fff;
 }
 
+.dd-pairing-code {
+  display: block;
+  margin-top: 20px;
+  border: 1px solid var(--dd-green-border);
+  border-radius: 10px;
+  padding: 17px;
+  color: var(--dd-text);
+  background: var(--dd-green-soft);
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.dd-receive-offer-files {
+  max-height: 150px;
+  overflow: auto;
+  list-style: none;
+  margin: 16px 0 0;
+  padding: 0;
+  border: 1px solid var(--dd-border);
+  border-radius: 9px;
+}
+
+.dd-receive-offer-files li {
+  display: flex;
+  min-height: 39px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--dd-border);
+  color: var(--dd-secondary);
+  font-size: 10px;
+}
+
+.dd-receive-offer-files li:last-child {
+  border-bottom: 0;
+}
+
+.dd-receive-offer-files li span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dd-receive-offer-files li small {
+  flex: 0 0 auto;
+  color: var(--dd-muted);
+}
+
+.dd-receive-safety-note {
+  margin: 12px 0 0 !important;
+  color: var(--dd-green) !important;
+  font-size: 10px;
+}
+
 @media (max-height: 760px) and (min-width: 721px) {
   .dd-workspace {
     padding-top: 16px;
@@ -1763,6 +2217,45 @@ button {
 
   .dd-drop-cta {
     margin-top: 15px;
+  }
+
+  .dd-nearby-page {
+    padding: 14px;
+  }
+
+  .dd-nearby-page > .dd-back-button {
+    min-height: 34px;
+    align-self: flex-start;
+  }
+
+  .dd-nearby-page > .dd-flow-heading {
+    margin: 10px 0;
+  }
+
+  .dd-nearby-page .dd-device-placeholder {
+    min-height: 115px;
+    padding: 14px;
+  }
+
+  .dd-nearby-page .dd-device-placeholder > span {
+    width: 46px;
+    height: 46px;
+    margin-bottom: 8px;
+  }
+
+  .dd-nearby-page .dd-device-placeholder p,
+  .dd-nearby-page .dd-device-types {
+    display: none;
+  }
+}
+
+@media (max-height: 700px) {
+  .dd-shell {
+    grid-template-rows: 54px minmax(0, 1fr);
+  }
+
+  .dd-feature-bar {
+    display: none;
   }
 }
 

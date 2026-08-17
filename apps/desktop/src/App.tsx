@@ -30,6 +30,7 @@ import {
   LockKeyhole,
   Play,
   QrCode,
+  Radar,
   Radio,
   Send,
   Settings2,
@@ -66,11 +67,31 @@ import { SenderTransfer } from "./sender-transfer";
 import { LanShareWorkspace } from "./LanShareWorkspace";
 import type { ProductMode } from "./product-mode";
 import {
+  beginNearbyPairing,
+  cancelNearbyTransfer,
+  decideNearbyPairing,
+  decideNearbyTransfer,
+  forgetNearbyDevice,
+  getNearbyStatus,
+  getNearbyTransfers,
   isTauri,
+  pauseNearbyTransfer,
   quitApp,
+  registerNearbyPaths,
   registerFiles,
   removeLocalFiles,
+  resumeNearbyTransfer,
+  retryNearbyTransfer,
+  sendNearbyFiles,
+  setNearbyAutoAcceptFiles,
   setActiveShareCount,
+  startNearby,
+  updateNearbyPreferences,
+  type NearbyDevice,
+  type NearbyPairingTicket,
+  type NearbyStatus,
+  type NearbyTransferOffer,
+  type NearbyTransferSnapshot,
 } from "./tauri";
 
 const apiBase =
@@ -93,6 +114,12 @@ type TransferRow = {
   peerId: string;
 };
 type PendingRequest = { sessionId: string; peerId: string };
+type NearbyPairingResult = {
+  pairingId: string;
+  deviceId: string;
+  accepted: boolean;
+  error: string | null;
+};
 type ShareView = "upload" | "history" | "received" | "list" | "detail";
 type SendStage = "files" | "next";
 
@@ -128,6 +155,13 @@ export function App() {
   const [autoStart, setAutoStart] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [lanError, setLanError] = useState<string>();
+  const [nearbyStatus, setNearbyStatus] = useState<NearbyStatus>();
+  const [nearbyTransfers, setNearbyTransfers] = useState<
+    NearbyTransferSnapshot[]
+  >([]);
+  const [nearbyPairing, setNearbyPairing] = useState<NearbyPairingTicket>();
+  const [nearbyOffer, setNearbyOffer] = useState<NearbyTransferOffer>();
+  const [nearbyBusyDeviceId, setNearbyBusyDeviceId] = useState<string>();
   const socketRef = useRef<WebSocket | null>(null);
   const reconnectTimerRef = useRef<number | undefined>(undefined);
   const reconnectAttemptsRef = useRef(0);
@@ -138,6 +172,7 @@ export function App() {
   const shareRef = useRef(share);
   const productModeRef = useRef(productMode);
   const notificationsRef = useRef(notificationsEnabled);
+  const nearbyTransfersRef = useRef(nearbyTransfers);
 
   const completedDownloads = Object.values(transfers).filter(
     (transfer) => transfer.state === "COMPLETED",
@@ -158,6 +193,9 @@ export function App() {
   useEffect(() => {
     notificationsRef.current = notificationsEnabled;
   }, [notificationsEnabled]);
+  useEffect(() => {
+    nearbyTransfersRef.current = nearbyTransfers;
+  }, [nearbyTransfers]);
 
   useEffect(() => {
     if (tab === "share" && window.scrollY > 0)
@@ -167,6 +205,30 @@ export function App() {
   const notifyIfEnabled = useCallback((title: string, body: string) => {
     if (notificationsRef.current) void notify(title, body);
   }, []);
+
+  const mergeNearbyTransfer = useCallback(
+    (snapshot: NearbyTransferSnapshot) => {
+      setNearbyTransfers((current) =>
+        [snapshot, ...current.filter((item) => item.id !== snapshot.id)].sort(
+          (left, right) => right.updatedAt - left.updatedAt,
+        ),
+      );
+      if (["COMPLETED", "FAILED", "CANCELLED"].includes(snapshot.status)) {
+        setNearbyOffer((current) =>
+          current?.transferId === snapshot.id ? undefined : current,
+        );
+      }
+      if (snapshot.status === "COMPLETED") {
+        notifyIfEnabled(
+          "Nearby 전송 완료",
+          snapshot.direction === "SEND"
+            ? `${snapshot.deviceName} 기기로 전송했습니다.`
+            : `${snapshot.deviceName} 기기에서 파일을 받았습니다.`,
+        );
+      }
+    },
+    [notifyIfEnabled],
+  );
 
   const send = useCallback((message: object) => {
     const socket = socketRef.current;
@@ -206,8 +268,13 @@ export function App() {
   const addLanPaths = useCallback(async (paths: string[]) => {
     if (!paths.length) return;
     try {
-      const registered = await registerFiles(paths);
-      setLanFiles((current) => [...current, ...registered]);
+      const registered = await registerNearbyPaths(paths);
+      setLanFiles((current) => [
+        ...current,
+        ...registered.filter(
+          (next) => !current.some((file) => file.id === next.id),
+        ),
+      ]);
       setTab("share");
       setShareView("upload");
       setSendStage("files");
@@ -282,10 +349,14 @@ export function App() {
       else cleanups.push(unlisten);
     });
     void listen("quit-requested", () => {
+      const hasActiveNearbyTransfer = nearbyTransfersRef.current.some(
+        (transfer) =>
+          !["COMPLETED", "FAILED", "CANCELLED"].includes(transfer.status),
+      );
       if (
-        !shareRef.current ||
+        (!shareRef.current && !hasActiveNearbyTransfer) ||
         window.confirm(
-          "활성 공유가 있습니다. DirectDrop을 종료하면 공유 링크를 사용할 수 없습니다. 종료할까요?",
+          "진행 중인 공유 또는 Nearby 전송이 있습니다. 종료하면 연결이 끊깁니다. 종료할까요?",
         )
       )
         void quitApp();
@@ -301,8 +372,104 @@ export function App() {
   }, [addLanPaths, addSharePaths, stopShare]);
 
   useEffect(() => {
-    if (isTauri()) void setActiveShareCount(share ? 1 : 0);
-  }, [share]);
+    if (!isTauri()) return;
+    let disposed = false;
+    const cleanups: Array<() => void> = [];
+
+    const refreshStatus = async () => {
+      try {
+        let status = await getNearbyStatus();
+        if (status.preferences.enabled && status.listeningPort === null)
+          status = await startNearby();
+        if (!disposed) setNearbyStatus(status);
+      } catch (statusError) {
+        if (!disposed)
+          setLanError(
+            statusError instanceof Error
+              ? statusError.message
+              : String(statusError),
+          );
+      }
+    };
+
+    void Promise.all([refreshStatus(), getNearbyTransfers()])
+      .then(([, currentTransfers]) => {
+        if (!disposed) setNearbyTransfers(currentTransfers);
+      })
+      .catch((transferError) => {
+        if (!disposed)
+          setLanError(
+            transferError instanceof Error
+              ? transferError.message
+              : String(transferError),
+          );
+      });
+    void listen<NearbyDevice[]>("nearby-devices", (event) => {
+      setNearbyStatus((current) =>
+        current ? { ...current, devices: event.payload } : current,
+      );
+    }).then((unlisten) => {
+      if (disposed) unlisten();
+      else cleanups.push(unlisten);
+    });
+    void listen<NearbyPairingTicket>("nearby-pairing-request", (event) => {
+      setNearbyPairing(event.payload);
+      setNearbyBusyDeviceId(event.payload.deviceId);
+      notifyIfEnabled(
+        "Nearby 페어링 요청",
+        `${event.payload.deviceName} 기기와 표시된 코드를 비교하세요.`,
+      );
+    }).then((unlisten) => {
+      if (disposed) unlisten();
+      else cleanups.push(unlisten);
+    });
+    void listen<NearbyPairingResult>("nearby-pairing-result", (event) => {
+      setNearbyPairing((current) =>
+        current?.pairingId === event.payload.pairingId ? undefined : current,
+      );
+      setNearbyBusyDeviceId((current) =>
+        current === event.payload.deviceId ? undefined : current,
+      );
+      if (event.payload.error) setLanError(event.payload.error);
+      else if (event.payload.accepted)
+        notifyIfEnabled("Nearby 연결 완료", "기기를 안전하게 등록했습니다.");
+      void refreshStatus();
+    }).then((unlisten) => {
+      if (disposed) unlisten();
+      else cleanups.push(unlisten);
+    });
+    void listen<NearbyTransferOffer>("nearby-transfer-offer", (event) => {
+      setNearbyOffer(event.payload);
+      notifyIfEnabled(
+        "Nearby 파일 수신 요청",
+        `${event.payload.deviceName} 기기에서 ${event.payload.files.length}개 파일을 보내려고 합니다.`,
+      );
+    }).then((unlisten) => {
+      if (disposed) unlisten();
+      else cleanups.push(unlisten);
+    });
+    void listen<NearbyTransferSnapshot>("nearby-transfer-progress", (event) =>
+      mergeNearbyTransfer(event.payload),
+    ).then((unlisten) => {
+      if (disposed) unlisten();
+      else cleanups.push(unlisten);
+    });
+
+    return () => {
+      disposed = true;
+      cleanups.forEach((cleanup) => cleanup());
+    };
+  }, [mergeNearbyTransfer, notifyIfEnabled]);
+
+  useEffect(() => {
+    if (!isTauri()) return;
+    const activeNearbyCount = nearbyTransfers.filter((transfer) =>
+      ["WAITING", "CONNECTING", "TRANSFERRING", "PAUSED"].includes(
+        transfer.status,
+      ),
+    ).length;
+    void setActiveShareCount((share ? 1 : 0) + activeNearbyCount);
+  }, [nearbyTransfers, share]);
 
   const selectFiles = async () => {
     if (!isTauri()) {
@@ -323,6 +490,72 @@ export function App() {
     if (selected)
       await addLanPaths(Array.isArray(selected) ? selected : [selected]);
   };
+
+  const selectLanFolder = async () => {
+    if (!isTauri()) {
+      setLanError("폴더 선택은 DirectDrop 데스크톱 앱에서 사용할 수 있습니다.");
+      return;
+    }
+    const selected = await open({ multiple: false, directory: true });
+    if (selected) await addLanPaths([selected]);
+  };
+
+  const refreshNearby = useCallback(async () => {
+    try {
+      const status = await getNearbyStatus();
+      setNearbyStatus(
+        status.preferences.enabled && status.listeningPort === null
+          ? await startNearby()
+          : status,
+      );
+      setNearbyTransfers(await getNearbyTransfers());
+      setLanError(undefined);
+    } catch (refreshError) {
+      setLanError(
+        refreshError instanceof Error
+          ? refreshError.message
+          : String(refreshError),
+      );
+    }
+  }, []);
+
+  const pairNearbyDevice = useCallback(async (device: NearbyDevice) => {
+    setNearbyBusyDeviceId(device.deviceId);
+    setLanError(undefined);
+    try {
+      setNearbyPairing(await beginNearbyPairing(device.deviceId));
+    } catch (pairError) {
+      setNearbyBusyDeviceId(undefined);
+      setLanError(
+        pairError instanceof Error ? pairError.message : String(pairError),
+      );
+    }
+  }, []);
+
+  const sendToNearbyDevice = useCallback(
+    async (device: NearbyDevice) => {
+      if (!lanFiles.length) {
+        setLanError("보낼 파일이나 폴더를 선택해 주세요.");
+        return;
+      }
+      setNearbyBusyDeviceId(device.deviceId);
+      setLanError(undefined);
+      try {
+        await sendNearbyFiles(
+          device.deviceId,
+          lanFiles.map((file) => file.id),
+        );
+        setNearbyTransfers(await getNearbyTransfers());
+      } catch (sendError) {
+        setLanError(
+          sendError instanceof Error ? sendError.message : String(sendError),
+        );
+      } finally {
+        setNearbyBusyDeviceId(undefined);
+      }
+    },
+    [lanFiles],
+  );
 
   const startNewShare = async () => {
     if (!shareRef.current) {
@@ -549,8 +782,7 @@ export function App() {
                 ...current,
                 [message.sessionId]: {
                   ...existing,
-                  state:
-                    message.state === "COMPLETED" ? "COMPLETED" : "FAILED",
+                  state: message.state === "COMPLETED" ? "COMPLETED" : "FAILED",
                 },
               };
             });
@@ -837,7 +1069,37 @@ export function App() {
             <About
               autoStart={autoStart}
               notificationsEnabled={notificationsEnabled}
+              nearbyStatus={nearbyStatus}
               onNotificationsEnabled={setNotificationsEnabled}
+              onNearbyChange={async (next) => {
+                try {
+                  const updated = await updateNearbyPreferences(next);
+                  setNearbyStatus(updated);
+                  setLanError(undefined);
+                } catch (updateError) {
+                  setLanError(
+                    updateError instanceof Error
+                      ? updateError.message
+                      : String(updateError),
+                  );
+                }
+              }}
+              onForgetNearbyDevice={async (deviceId) => {
+                try {
+                  setNearbyStatus(await forgetNearbyDevice(deviceId));
+                } catch (forgetError) {
+                  setLanError(String(forgetError));
+                }
+              }}
+              onNearbyAutoAccept={async (deviceId, enabled) => {
+                try {
+                  setNearbyStatus(
+                    await setNearbyAutoAcceptFiles(deviceId, enabled),
+                  );
+                } catch (trustError) {
+                  setLanError(String(trustError));
+                }
+              }}
               onAutoStart={async (enabled) => {
                 if (enabled) await enable();
                 else await disable();
@@ -845,9 +1107,12 @@ export function App() {
               }}
             />
           ) : shareView === "history" ? (
-            <TransferHistory transfers={transfers} />
+            <TransferHistory
+              transfers={transfers}
+              nearbyTransfers={nearbyTransfers}
+            />
           ) : shareView === "received" ? (
-            <ReceivedFiles />
+            <ReceivedFiles nearbyTransfers={nearbyTransfers} />
           ) : shareView === "list" && share ? (
             <ShareList
               share={share}
@@ -912,6 +1177,11 @@ export function App() {
                     mode={productMode}
                     dragging={isDragging}
                     onSelect={() => void selectActiveFiles()}
+                    onSelectFolder={
+                      productMode === "lan-share"
+                        ? () => void selectLanFolder()
+                        : undefined
+                    }
                     onRemove={(file) => void removeActiveFile(file)}
                     onContinue={() => setSendStage("next")}
                   />
@@ -920,7 +1190,33 @@ export function App() {
               ) : productMode === "lan-share" ? (
                 <LanShareWorkspace
                   files={lanFiles}
+                  status={nearbyStatus}
+                  transfers={nearbyTransfers}
+                  busyDeviceId={nearbyBusyDeviceId}
                   onBack={() => setSendStage("files")}
+                  onRefresh={() => void refreshNearby()}
+                  onPair={(device) => void pairNearbyDevice(device)}
+                  onSend={(device) => void sendToNearbyDevice(device)}
+                  onPause={(transferId) =>
+                    void pauseNearbyTransfer(transferId).catch((pauseError) =>
+                      setLanError(String(pauseError)),
+                    )
+                  }
+                  onResume={(transferId) =>
+                    void resumeNearbyTransfer(transferId).catch((resumeError) =>
+                      setLanError(String(resumeError)),
+                    )
+                  }
+                  onRetry={(transferId) =>
+                    void retryNearbyTransfer(transferId).catch((retryError) =>
+                      setLanError(String(retryError)),
+                    )
+                  }
+                  onCancel={(transferId) =>
+                    void cancelNearbyTransfer(transferId).catch((cancelError) =>
+                      setLanError(String(cancelError)),
+                    )
+                  }
                 />
               ) : (
                 <ShareLinkSetup
@@ -993,6 +1289,33 @@ export function App() {
           onSave={saveQr}
         />
       )}
+      {nearbyPairing && (
+        <NearbyPairingDialog
+          ticket={nearbyPairing}
+          onDecision={(accepted) => {
+            const ticket = nearbyPairing;
+            setNearbyPairing(undefined);
+            void decideNearbyPairing(ticket.pairingId, accepted).catch(
+              (decisionError) => {
+                setNearbyBusyDeviceId(undefined);
+                setLanError(String(decisionError));
+              },
+            );
+          }}
+        />
+      )}
+      {nearbyOffer && (
+        <NearbyReceiveDialog
+          offer={nearbyOffer}
+          onDecision={(accepted) => {
+            const offer = nearbyOffer;
+            setNearbyOffer(undefined);
+            void decideNearbyTransfer(offer.transferId, accepted).catch(
+              (decisionError) => setLanError(String(decisionError)),
+            );
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -1044,6 +1367,7 @@ function SendFileStage({
   mode,
   dragging,
   onSelect,
+  onSelectFolder,
   onRemove,
   onContinue,
 }: {
@@ -1052,30 +1376,46 @@ function SendFileStage({
   mode: ProductMode;
   dragging: boolean;
   onSelect: () => void;
+  onSelectFolder?: () => void;
   onRemove: (file: PublicFile) => void;
   onContinue: () => void;
 }) {
   if (!files.length) {
     return (
-      <button
-        type="button"
-        className={`dd-drop-zone ${dragging ? "is-dragging" : ""}`}
-        onClick={onSelect}
-      >
-        <span className="dd-drop-folder">
-          <FolderOpen aria-hidden="true" size={45} strokeWidth={1.6} />
-        </span>
-        <strong>파일을 드래그하거나 선택하세요</strong>
-        <p>여러 파일을 한 번에 선택할 수 있습니다.</p>
-        <span className="dd-drop-cta">
-          <FolderOpen aria-hidden="true" size={17} />
-          파일 선택
-        </span>
-        <small>
-          <LockKeyhole aria-hidden="true" size={14} />
-          전송 데이터는 상대방 기기로 직접 전달됩니다.
-        </small>
-      </button>
+      <div className="dd-drop-container">
+        <button
+          type="button"
+          className={`dd-drop-zone ${dragging ? "is-dragging" : ""}`}
+          onClick={onSelect}
+        >
+          <span className="dd-drop-folder">
+            <FolderOpen aria-hidden="true" size={45} strokeWidth={1.6} />
+          </span>
+          <strong>파일을 드래그하거나 선택하세요</strong>
+          <p>
+            {onSelectFolder
+              ? "여러 파일과 폴더 구조를 그대로 전송할 수 있습니다."
+              : "여러 파일을 한 번에 선택할 수 있습니다."}
+          </p>
+          <span className="dd-drop-cta">
+            <FolderOpen aria-hidden="true" size={17} />
+            파일 선택
+          </span>
+          <small>
+            <LockKeyhole aria-hidden="true" size={14} />
+            전송 데이터는 상대방 기기로 직접 전달됩니다.
+          </small>
+        </button>
+        {onSelectFolder && (
+          <button
+            type="button"
+            className="dd-folder-action"
+            onClick={onSelectFolder}
+          >
+            <FolderOpen aria-hidden="true" size={17} /> 폴더 선택
+          </button>
+        )}
+      </div>
     );
   }
 
@@ -1124,6 +1464,16 @@ function SendFileStage({
           <FilePlus2 aria-hidden="true" size={17} />
           파일 추가
         </button>
+        {onSelectFolder && (
+          <button
+            type="button"
+            className="dd-secondary-action"
+            onClick={onSelectFolder}
+          >
+            <FolderOpen aria-hidden="true" size={17} />
+            폴더 추가
+          </button>
+        )}
         <button
           type="button"
           className="dd-primary-action"
@@ -1197,10 +1547,13 @@ function RecentTransfers({
 
 function TransferHistory({
   transfers,
+  nearbyTransfers,
 }: {
   transfers: Record<string, TransferRow>;
+  nearbyTransfers: NearbyTransferSnapshot[];
 }) {
   const entries = Object.entries(transfers).reverse();
+  const hasEntries = entries.length > 0 || nearbyTransfers.length > 0;
 
   return (
     <section className="dd-library-page" aria-labelledby="history-title">
@@ -1211,8 +1564,37 @@ function TransferHistory({
         </div>
         <History aria-hidden="true" size={22} />
       </header>
-      {entries.length ? (
+      {hasEntries ? (
         <ul className="dd-library-list">
+          {nearbyTransfers.map((transfer) => (
+            <li key={transfer.id}>
+              <span className="dd-file-icon">
+                {transfer.direction === "SEND" ? (
+                  <Send aria-hidden="true" size={18} />
+                ) : (
+                  <Download aria-hidden="true" size={18} />
+                )}
+              </span>
+              <span>
+                <strong>
+                  Nearby · {transfer.files[0]?.name ?? "파일"}
+                  {transfer.files.length > 1
+                    ? ` 외 ${transfer.files.length - 1}개`
+                    : ""}
+                </strong>
+                <small>
+                  {transfer.deviceName} · {statusLabelKo(transfer.status)}
+                </small>
+              </span>
+              <span className="dd-transfer-percent">
+                {transfer.totalBytes
+                  ? `${Math.min(100, (transfer.transferredBytes / transfer.totalBytes) * 100).toFixed(0)}%`
+                  : transfer.status === "COMPLETED"
+                    ? "100%"
+                    : "—"}
+              </span>
+            </li>
+          ))}
           {entries.map(([sessionId, transfer]) => (
             <li key={sessionId}>
               <span className="dd-file-icon">
@@ -1243,7 +1625,15 @@ function TransferHistory({
   );
 }
 
-function ReceivedFiles() {
+function ReceivedFiles({
+  nearbyTransfers,
+}: {
+  nearbyTransfers: NearbyTransferSnapshot[];
+}) {
+  const received = nearbyTransfers.filter(
+    (transfer) =>
+      transfer.direction === "RECEIVE" && transfer.status === "COMPLETED",
+  );
   return (
     <section className="dd-library-page" aria-labelledby="received-title">
       <header>
@@ -1253,13 +1643,49 @@ function ReceivedFiles() {
         </div>
         <Inbox aria-hidden="true" size={22} />
       </header>
-      <div className="dd-library-empty">
-        <Inbox aria-hidden="true" size={30} />
-        <h2>받은 파일이 없습니다.</h2>
-        <p>수신 기능이 연결되면 실제로 저장된 항목만 이곳에 표시됩니다.</p>
-      </div>
+      {received.length ? (
+        <ul className="dd-library-list">
+          {received.map((transfer) => (
+            <li key={transfer.id}>
+              <span className="dd-file-icon">
+                <Download aria-hidden="true" size={18} />
+              </span>
+              <span>
+                <strong>
+                  {transfer.files[0]?.name ?? "파일"}
+                  {transfer.files.length > 1
+                    ? ` 외 ${transfer.files.length - 1}개`
+                    : ""}
+                </strong>
+                <small>
+                  {transfer.deviceName} · {formatBytes(transfer.totalBytes)}
+                </small>
+              </span>
+              <span className="dd-transfer-percent">저장 완료</span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <div className="dd-library-empty">
+          <Inbox aria-hidden="true" size={30} />
+          <h2>받은 파일이 없습니다.</h2>
+          <p>Nearby로 받은 파일이 저장되면 이곳에 표시됩니다.</p>
+        </div>
+      )}
     </section>
   );
+}
+
+function statusLabelKo(status: NearbyTransferSnapshot["status"]) {
+  return {
+    WAITING: "승인 대기",
+    CONNECTING: "연결 중",
+    TRANSFERRING: "전송 중",
+    PAUSED: "일시정지",
+    COMPLETED: "완료",
+    FAILED: "실패",
+    CANCELLED: "취소됨",
+  }[status];
 }
 
 function ShareLinkSetup({
@@ -1945,13 +2371,21 @@ function ShareRemaining({ expiresAt }: { expiresAt: string | null }) {
 function About({
   autoStart,
   notificationsEnabled,
+  nearbyStatus,
   onAutoStart,
   onNotificationsEnabled,
+  onNearbyChange,
+  onForgetNearbyDevice,
+  onNearbyAutoAccept,
 }: {
   autoStart: boolean;
   notificationsEnabled: boolean;
+  nearbyStatus?: NearbyStatus;
   onAutoStart: (enabled: boolean) => Promise<void>;
   onNotificationsEnabled: (enabled: boolean) => void;
+  onNearbyChange: (preferences: NearbyStatus["preferences"]) => Promise<void>;
+  onForgetNearbyDevice: (deviceId: string) => Promise<void>;
+  onNearbyAutoAccept: (deviceId: string, enabled: boolean) => Promise<void>;
 }) {
   return (
     <div className="dd-about mx-auto max-w-2xl">
@@ -1960,11 +2394,20 @@ function About({
         <h1 className="dd-about-title mt-6 text-2xl font-bold">
           DirectDrop 정보
         </h1>
-        <p className="mt-1 text-sm text-slate-500">Version 0.1.4</p>
+        <p className="mt-1 text-sm text-slate-500">Version 0.2.0</p>
         <p className="dd-about-description mt-5 text-sm leading-6 text-slate-600">
-          파일을 서버에 저장하지 않고 WebRTC P2P로 상대방 기기에 직접
-          전송합니다.
+          Nearby는 같은 네트워크에서 TLS로, Share Link는 WebRTC P2P로 파일을
+          상대방 기기에 직접 전송합니다.
         </p>
+        {nearbyStatus && (
+          <NearbySettings
+            key={`${nearbyStatus.preferences.deviceName}:${nearbyStatus.preferences.downloadDirectory}`}
+            status={nearbyStatus}
+            onChange={onNearbyChange}
+            onForget={onForgetNearbyDevice}
+            onAutoAccept={onNearbyAutoAccept}
+          />
+        )}
         <div className="dd-about-links mt-6 grid gap-3">
           <a
             href="https://share.dlfkd.dev"
@@ -2021,6 +2464,110 @@ function About({
   );
 }
 
+function NearbySettings({
+  status,
+  onChange,
+  onForget,
+  onAutoAccept,
+}: {
+  status: NearbyStatus;
+  onChange: (preferences: NearbyStatus["preferences"]) => Promise<void>;
+  onForget: (deviceId: string) => Promise<void>;
+  onAutoAccept: (deviceId: string, enabled: boolean) => Promise<void>;
+}) {
+  const [deviceName, setDeviceName] = useState(status.preferences.deviceName);
+  const [downloadDirectory, setDownloadDirectory] = useState(
+    status.preferences.downloadDirectory,
+  );
+  const [saving, setSaving] = useState(false);
+
+  const save = async (enabled = status.preferences.enabled) => {
+    setSaving(true);
+    try {
+      await onChange({ enabled, deviceName, downloadDirectory });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <section
+      className="dd-nearby-settings"
+      aria-labelledby="nearby-settings-title"
+    >
+      <header>
+        <span>
+          <Radar aria-hidden="true" size={18} />
+          <strong id="nearby-settings-title">Nearby</strong>
+        </span>
+        <label>
+          <span>{status.preferences.enabled ? "수신 켜짐" : "수신 꺼짐"}</span>
+          <input
+            type="checkbox"
+            checked={status.preferences.enabled}
+            disabled={saving}
+            onChange={(event) => void save(event.target.checked)}
+            className="dd-switch shrink-0"
+          />
+        </label>
+      </header>
+      <label>
+        <span>이 기기 이름</span>
+        <input
+          value={deviceName}
+          maxLength={64}
+          onChange={(event) => setDeviceName(event.target.value)}
+        />
+      </label>
+      <label>
+        <span>받은 파일 저장 위치</span>
+        <input
+          value={downloadDirectory}
+          onChange={(event) => setDownloadDirectory(event.target.value)}
+        />
+      </label>
+      <button type="button" disabled={saving} onClick={() => void save()}>
+        {saving ? "저장 중…" : "Nearby 설정 저장"}
+      </button>
+      <div className="dd-trusted-devices">
+        <strong>신뢰하는 기기 {status.trustedDevices.length}개</strong>
+        {status.trustedDevices.length ? (
+          <ul>
+            {status.trustedDevices.map((device) => (
+              <li key={device.deviceId}>
+                <span>
+                  <strong>{device.deviceName}</strong>
+                  <small>{device.deviceId.slice(0, 12)}</small>
+                </span>
+                <span className="dd-trusted-device-actions">
+                  <label title="이 기기의 파일을 확인 없이 자동 수신">
+                    <input
+                      type="checkbox"
+                      checked={device.autoAcceptFiles}
+                      onChange={(event) =>
+                        void onAutoAccept(device.deviceId, event.target.checked)
+                      }
+                    />
+                    자동 수신
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => void onForget(device.deviceId)}
+                  >
+                    연결 해제
+                  </button>
+                </span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p>페어링한 기기가 없습니다.</p>
+        )}
+      </div>
+    </section>
+  );
+}
+
 function ApprovalDialog({
   files,
   onAccept,
@@ -2058,6 +2605,107 @@ function ApprovalDialog({
             className="bg-blue-600 text-white hover:bg-blue-700"
           >
             <Check aria-hidden="true" size={17} /> 허용
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function NearbyPairingDialog({
+  ticket,
+  onDecision,
+}: {
+  ticket: NearbyPairingTicket;
+  onDecision: (accepted: boolean) => void;
+}) {
+  return (
+    <div
+      className="dd-dialog-backdrop fixed inset-0 z-50 grid place-items-center bg-slate-950/50 p-5"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="nearby-pairing-title"
+    >
+      <div className="dd-dialog dd-nearby-dialog w-full max-w-md rounded-2xl bg-white p-6">
+        <ShieldCheck className="text-blue-700" aria-hidden="true" />
+        <h2 id="nearby-pairing-title" className="mt-4 text-xl font-bold">
+          {ticket.deviceName} 기기와 연결
+        </h2>
+        <p className="mt-2 text-sm text-slate-600">
+          두 기기에 아래 숫자가 똑같이 표시되는지 확인하세요. 다르면 취소해야
+          합니다.
+        </p>
+        <output className="dd-pairing-code" aria-label="페어링 확인 코드">
+          {ticket.code.slice(0, 3)} {ticket.code.slice(3)}
+        </output>
+        <div className="mt-6 grid grid-cols-2 gap-3">
+          <Button
+            onClick={() => onDecision(false)}
+            className="border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
+          >
+            <X aria-hidden="true" size={17} /> 취소
+          </Button>
+          <Button
+            onClick={() => onDecision(true)}
+            className="bg-blue-600 text-white hover:bg-blue-700"
+          >
+            <Check aria-hidden="true" size={17} /> 코드 일치
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function NearbyReceiveDialog({
+  offer,
+  onDecision,
+}: {
+  offer: NearbyTransferOffer;
+  onDecision: (accepted: boolean) => void;
+}) {
+  return (
+    <div
+      className="dd-dialog-backdrop fixed inset-0 z-50 grid place-items-center bg-slate-950/50 p-5"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="nearby-receive-title"
+    >
+      <div className="dd-dialog dd-nearby-dialog w-full max-w-md rounded-2xl bg-white p-6">
+        <Download className="text-blue-700" aria-hidden="true" />
+        <h2 id="nearby-receive-title" className="mt-4 text-xl font-bold">
+          Nearby 파일을 받을까요?
+        </h2>
+        <p className="mt-2 text-sm text-slate-600">
+          <strong>{offer.deviceName}</strong> 기기가 {offer.files.length}개 파일
+          ({formatBytes(offer.totalBytes)})을 보내려고 합니다.
+        </p>
+        <ul className="dd-receive-offer-files">
+          {offer.files.slice(0, 4).map((file) => (
+            <li key={file.id}>
+              <span title={file.relativePath}>{file.relativePath}</span>
+              <small>{formatBytes(file.size)}</small>
+            </li>
+          ))}
+          {offer.files.length > 4 && (
+            <li>그 외 {offer.files.length - 4}개 파일</li>
+          )}
+        </ul>
+        <p className="dd-receive-safety-note">
+          승인해야만 저장을 시작하며 기존 파일은 덮어쓰지 않습니다.
+        </p>
+        <div className="mt-6 grid grid-cols-2 gap-3">
+          <Button
+            onClick={() => onDecision(false)}
+            className="border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
+          >
+            <X aria-hidden="true" size={17} /> 거절
+          </Button>
+          <Button
+            onClick={() => onDecision(true)}
+            className="bg-blue-600 text-white hover:bg-blue-700"
+          >
+            <Check aria-hidden="true" size={17} /> 받기
           </Button>
         </div>
       </div>

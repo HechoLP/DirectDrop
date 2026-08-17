@@ -22,7 +22,7 @@ import { BrandMark, StatusPill } from "@directdrop/ui";
 
 const sourceUrl = "https://github.com/HechoLP/directdrop";
 const releaseUrl = `${sourceUrl}/releases/latest`;
-const releaseVersion = "v0.1.4";
+const releaseVersion = "v0.2.0";
 const releaseDownloadBase = `${sourceUrl}/releases/download/${releaseVersion}`;
 
 const downloads = [
@@ -85,6 +85,11 @@ const faqs = [
       "전송이 끝날 때까지 송신자의 DirectDrop 앱과 컴퓨터가 온라인이어야 합니다. 공유를 중지하거나 앱을 종료하면 링크로 더 이상 받을 수 없습니다.",
   },
   {
+    question: "Nearby는 인터넷 없이도 작동하나요?",
+    answer:
+      "네. 두 컴퓨터가 같은 Wi-Fi 또는 Ethernet에 있으면 mDNS로 서로를 찾고 인증된 TLS 연결로 직접 전송합니다. 양쪽에 DirectDrop v0.2.0 이상이 필요합니다.",
+  },
+  {
     question: "모든 네트워크에서 연결되나요?",
     answer:
       "기본 구성은 STUN을 사용하는 Direct P2P 전용입니다. 회사·학교처럼 방화벽이 엄격한 환경이나 일부 NAT에서는 연결이 실패할 수 있으며, 서버 업로드 방식으로 우회하지 않습니다.",
@@ -113,6 +118,12 @@ export function LandingPage() {
               className="inline-flex min-h-11 items-center rounded-xl px-3.5 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-950"
             >
               작동 방식
+            </a>
+            <a
+              href="#nearby"
+              className="inline-flex min-h-11 items-center rounded-xl px-3.5 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-950"
+            >
+              Nearby
             </a>
             <a
               href="#security"
@@ -156,8 +167,8 @@ export function LandingPage() {
                 <span className="text-blue-600">상대방에게 바로.</span>
               </h1>
               <p className="mt-6 max-w-xl text-base leading-7 text-[#4e5968] sm:text-lg sm:leading-8">
-                업로드를 기다릴 필요 없이 링크 하나로 시작하세요. DirectDrop은
-                내 컴퓨터와 상대방 브라우저를 직접 연결합니다.
+                가까운 기기는 Nearby로 인터넷 없이, 멀리 있는 사람은 링크로.
+                DirectDrop은 파일을 서버에 올리지 않고 기기를 직접 연결합니다.
               </p>
               <div className="mt-9 flex flex-col gap-3 sm:flex-row">
                 <a
@@ -175,7 +186,7 @@ export function LandingPage() {
                 </a>
               </div>
               <div className="mt-7 flex flex-wrap gap-x-5 gap-y-2 text-sm font-medium text-[#6b7684]">
-                {["파일 저장 0B", "수신자 설치 없음", "오픈 소스"].map(
+                {["서버 파일 저장 0B", "Nearby 오프라인", "오픈 소스"].map(
                   (item) => (
                     <span
                       key={item}
@@ -304,12 +315,105 @@ export function LandingPage() {
           </div>
         </section>
 
+        <section id="nearby" className="scroll-mt-20 py-20 sm:py-28">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            <div className="max-w-3xl">
+              <p className="text-sm font-bold text-blue-600">
+                TWO DIRECT PATHS
+              </p>
+              <h2 className="mt-3 text-3xl font-bold tracking-[-.035em] sm:text-4xl">
+                가까이 있어도, 멀리 있어도
+                <br />
+                파일은 기기 사이로 바로 가요
+              </h2>
+              <p className="mt-4 max-w-2xl text-base leading-7 text-[#6b7684]">
+                같은 네트워크라면 Nearby가 외부 서버 없이 찾고 보내며, 다른
+                장소라면 Share Link가 브라우저와 WebRTC로 연결합니다.
+              </p>
+            </div>
+
+            <div className="mt-12 grid gap-5 lg:grid-cols-2">
+              <article className="rounded-[28px] border border-blue-200 bg-blue-50/60 p-6 sm:p-8">
+                <div className="flex items-start justify-between gap-4">
+                  <span className="grid size-12 place-items-center rounded-2xl bg-blue-600 text-white">
+                    <Wifi aria-hidden="true" size={23} />
+                  </span>
+                  <StatusPill tone="success">인터넷 불필요</StatusPill>
+                </div>
+                <p className="mt-7 text-xs font-bold tracking-[.12em] text-blue-700">
+                  NEARBY
+                </p>
+                <h3 className="mt-2 text-2xl font-bold">
+                  같은 네트워크로 빠르게
+                </h3>
+                <p className="mt-3 text-sm leading-6 text-[#4e5968]">
+                  mDNS 자동 검색, 양쪽 6자리 확인, 인증서 고정 TLS로 파일과
+                  폴더를 직접 보냅니다.
+                </p>
+                <ul className="mt-6 grid gap-3 text-sm font-semibold text-[#333d4b] sm:grid-cols-2">
+                  {[
+                    "다중 파일·폴더",
+                    "중단 후 이어보내기",
+                    "SHA-256 무결성",
+                    "수신 전 승인",
+                  ].map((item) => (
+                    <li key={item} className="flex items-center gap-2">
+                      <Check
+                        aria-hidden="true"
+                        size={16}
+                        className="text-blue-600"
+                      />
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+              </article>
+
+              <article className="rounded-[28px] border border-slate-200 bg-white p-6 sm:p-8">
+                <div className="flex items-start justify-between gap-4">
+                  <span className="grid size-12 place-items-center rounded-2xl bg-[#191f28] text-white">
+                    <Globe2 aria-hidden="true" size={23} />
+                  </span>
+                  <StatusPill tone="neutral">브라우저 수신</StatusPill>
+                </div>
+                <p className="mt-7 text-xs font-bold tracking-[.12em] text-[#6b7684]">
+                  SHARE LINK
+                </p>
+                <h3 className="mt-2 text-2xl font-bold">
+                  링크로 어디서나 공유
+                </h3>
+                <p className="mt-3 text-sm leading-6 text-[#4e5968]">
+                  임시 링크나 QR을 보내면 상대방이 앱 설치 없이 브라우저에서
+                  WebRTC로 직접 받습니다.
+                </p>
+                <ul className="mt-6 grid gap-3 text-sm font-semibold text-[#333d4b] sm:grid-cols-2">
+                  {[
+                    "자동 만료",
+                    "다운로드 횟수",
+                    "비밀번호 보호",
+                    "QR 공유",
+                  ].map((item) => (
+                    <li key={item} className="flex items-center gap-2">
+                      <Check
+                        aria-hidden="true"
+                        size={16}
+                        className="text-blue-600"
+                      />
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+              </article>
+            </div>
+          </div>
+        </section>
+
         <section id="how" className="scroll-mt-20 py-20 sm:py-28">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <div className="max-w-2xl">
               <p className="text-sm font-bold text-blue-600">HOW IT WORKS</p>
               <h2 className="mt-3 text-3xl font-bold tracking-[-.035em] sm:text-4xl">
-                세 단계면 충분해요
+                Share Link는 세 단계면 충분해요
               </h2>
               <p className="mt-4 text-base leading-7 text-[#6b7684]">
                 회원가입이나 파일 업로드 없이, 보내는 사람이 직접 공유를
@@ -355,9 +459,9 @@ export function LandingPage() {
                 보관하지 않아요
               </h2>
               <p className="mt-5 max-w-lg text-base leading-7 text-[#6b7684]">
-                DirectDrop 서버는 연결을 맺기 위한 signaling과 임시 메타데이터만
-                처리합니다. 실제 파일은 송신자의 디스크에서 수신자의 브라우저로
-                바로 전달됩니다.
+                Share Link 서버는 signaling과 임시 metadata만 처리합니다. 실제
+                파일은 WebRTC로 이동합니다. Nearby는 discovery부터 파일 전송까지
+                로컬 네트워크 안에서 인증된 TLS로 처리합니다.
               </p>
               <a
                 href={`${sourceUrl}/blob/main/docs/architecture.md`}
@@ -441,7 +545,7 @@ export function LandingPage() {
                   내 컴퓨터에 맞게 받으세요
                 </h2>
                 <p className="mt-4 text-base leading-7 text-[#6b7684]">
-                  받는 사람은 설치할 필요가 없습니다.
+                  Nearby는 양쪽 설치, Share Link 수신자는 설치가 필요 없습니다.
                 </p>
               </div>
               <a
@@ -512,8 +616,9 @@ export function LandingPage() {
               </pre>
             </div>
             <p className="mt-4 text-xs leading-5 text-[#8b95a1]">
-              설치 파일은 현재 코드 서명·공증되지 않았습니다. 다운로드 후
-              릴리스의 SHA256SUMS.txt를 확인할 수 있습니다.
+              Windows 설치 파일은 코드 서명되지 않았고, 요청에 따라 macOS
+              Developer ID 서명·공증은 제외했습니다. 다운로드 후 릴리스의
+              SHA256SUMS.txt를 확인할 수 있습니다.
             </p>
           </div>
         </section>
