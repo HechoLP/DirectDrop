@@ -286,11 +286,11 @@ fn read_identity(path: &Path) -> Result<IdentityFile, NearbyError> {
     Ok(identity)
 }
 
-fn set_private_permissions(path: &Path) -> Result<(), NearbyError> {
+fn set_private_permissions(_path: &Path) -> Result<(), NearbyError> {
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        fs::set_permissions(path, fs::Permissions::from_mode(0o600))?;
+        fs::set_permissions(_path, fs::Permissions::from_mode(0o600))?;
     }
     Ok(())
 }

@@ -42,6 +42,7 @@
 - 현재 공유/전송 중 종료 경고에 Nearby active transfer 포함
 - 동기 Tauri command에서 Nearby outbound task를 시작할 때 Tokio reactor가 없어 앱이 종료되던 문제 수정
 - Nearby 기기별 보내기 버튼에 고유 접근성 이름을 추가해 보조 기술에서 대상 기기를 정확히 구분
+- Windows에서 Unix 전용 권한 인자가 사용되지 않아 네이티브 CI가 실패하던 교차 플랫폼 경고 수정
 
 ## 0.1.4 - 2026-08-17
 
