@@ -27,14 +27,14 @@ async function testApp(extra: Record<string, string> = {}) {
 
 describe("DirectDrop API", () => {
   it("indexes only the successful public landing page", () => {
-    expect(robotsDirective("/", "text/html", 200)).toBe("index, follow");
-    expect(robotsDirective("/?from=github", "text/html", 200)).toBe(
+    expect(robotsDirective("/", 200)).toBe("index, follow");
+    expect(robotsDirective("/?from=github", 200)).toBe(
       "index, follow",
     );
-    expect(robotsDirective("/s/private-share", "text/html", 200)).toBe(
+    expect(robotsDirective("/s/private-share", 200)).toBe(
       "noindex, nofollow, noarchive",
     );
-    expect(robotsDirective("/", "text/html", 404)).toBe(
+    expect(robotsDirective("/", 404)).toBe(
       "noindex, nofollow, noarchive",
     );
   });
