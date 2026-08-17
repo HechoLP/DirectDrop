@@ -14,6 +14,8 @@
 | Paired authentication | PASS | HMAC proof tamper rejection, role·nonce·ID·fingerprint binding                   |
 | mDNS metadata bounds  | PASS | bounded parser, local 주소 선택, 실제 OS advertise/browse와 두 앱 discovery 확인 |
 | Connection abuse      | PASS | 16 concurrent semaphore, IP당 분당 60 connection rate limit                      |
+| Discovery state abuse | PASS | device 256/service name 512 상한과 unpaired eviction                             |
+| Native app quit       | PASS | active share가 있으면 ExitRequested를 WebView 확인 흐름으로 전달                 |
 | Secret exposure       | PASS | WebView용 trusted device summary에서 shared secret 제외                          |
 
 ## Nearby file behavior
@@ -58,7 +60,9 @@
 | Gate                                    | 현재 상태                        |
 | --------------------------------------- | -------------------------------- |
 | `pnpm check`                            | PASS locally                     |
-| Rust fmt/clippy/tests                   | PASS locally                     |
+| Rust fmt/clippy/24 tests                | PASS locally                     |
+| npm/Cargo dependency vulnerability      | PASS, vulnerability 0            |
+| Git history secret scan                 | PASS, 32 commits, leak 0         |
 | macOS arm64 app build                   | PASS locally and GitHub release  |
 | macOS Intel app build                   | PASS in GitHub release workflow  |
 | Windows installer                       | PASS, NSIS EXE and x64 MSI       |

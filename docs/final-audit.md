@@ -1,139 +1,101 @@
-# DirectDrop v0.2.0 Final Audit
+# DirectDrop v0.2.0 Final Security Audit
 
 감사일: 2026-08-17
 
+감사 기준 커밋: `7ea5a97` (`2c1e781` 서버 보안 수정 포함)
+
 ## 결론
 
-**릴리스 및 운영 배포 상태: PASS**
+**판정: READY WITH KNOWN LIMITATIONS**
 
-DirectDrop v0.2.0의 Nearby 핵심 경로는 macOS arm64 한 대에서 서로 다른 bundle ID와 별도 앱 데이터 디렉터리를 사용하는 두 앱 인스턴스로 실제 검증했습니다. mDNS 발견, 인증서 고정 TLS, 6자리 상호 확인, 신뢰 저장, 수신 승인, 파일 스트리밍, 양쪽 완료 기록과 SHA-256 원본 일치를 확인했습니다.
+이번 최종 감사에서 CRITICAL/HIGH 취약점은 확인되지 않았습니다. 운영 또는 장시간 사용에서 문제가 될 수 있는 MEDIUM 8건과 LOW 1건을 재현하거나 코드 경로로 확인해 모두 수정했습니다. 서버 수정은 `share.dlfkd.dev` 운영 환경에 반영했고, 만료·중지된 공유 메타데이터도 백업 후 자동 정리했습니다.
 
-GitHub 원격 CI, Apple Silicon·Intel macOS와 Windows installer 생성, 공개 checksum 검증, 운영 `share.dlfkd.dev` v0.2.0 배포와 배포 후 보안 검증을 완료했습니다. Apple Developer ID 서명과 공증은 사용자 요청에 따라 이번 릴리스 범위에서 제외했습니다.
+Apple Developer ID 서명·공증은 사용자 요청에 따라 범위에서 제외합니다. 서로 다른 물리 Mac/Windows 장치, 여러 공유기, 1 GiB 이상 파일의 장시간 전송은 별도 실장비 매트릭스가 남아 있습니다.
 
-## 감사 환경
+## 발견 및 조치
 
-| 항목           | 확인 범위                                                            |
-| -------------- | -------------------------------------------------------------------- |
-| OS             | macOS arm64                                                          |
-| Desktop        | Tauri 2 release bundle 2개, 별도 identity/history/storage            |
-| Nearby network | 같은 Mac의 loopback을 포함한 실제 OS mDNS browse와 native TCP/TLS    |
-| Browser/server | workspace production build와 자동 테스트                             |
-| Windows        | GitHub Windows runner의 fmt, Clippy, 21 Rust tests와 installer build |
-| 물리 장치      | 서로 다른 물리 Mac/Windows 조합은 별도 후속 matrix 필요              |
+| ID   | 심각도 | 발견한 문제                                                                                                            | 조치                                                                          | 검증                                                      |
+| ---- | ------ | ---------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- | --------------------------------------------------------- |
+| F-01 | MEDIUM | Cloudflare Tunnel 뒤 모든 사용자가 loopback IP로 집계되어 한 사용자의 요청이 전체 사용자의 rate limit을 소진할 수 있음 | loopback reverse proxy만 신뢰하고 실제 client IP별 bucket 분리                | 한 IP 429 후 다른 IP 404 유지 테스트                      |
+| F-02 | MEDIUM | 만료·중지·다운로드 한도 도달 공유가 파일명과 크기를 계속 노출                                                          | terminal 상태에서 파일 목록·크기를 숨기고 새 password grant 거부              | 만료 파일명 비노출 및 410 테스트                          |
+| F-03 | MEDIUM | 조회되지 않은 ACTIVE row는 시간이 지나도 cleanup 대상이 되지 않아 메타데이터가 영구 잔존                               | `expires_at <= now`를 cleanup 조건에 포함하고 운영 cleanup 활성화             | 운영 17 share/19 file row → 0/0, 사전 DB 백업 무결성 PASS |
+| F-04 | MEDIUM | WebSocket message rate limit은 있었지만 장기 연결 수 상한이 없어 socket 고갈 가능                                      | 전역 1,000개, IP당 16개 active signaling 연결 상한                            | 17번째 연결이 1013으로 종료되는 통합 테스트               |
+| F-05 | MEDIUM | mDNS device/service map이 무제한 증가해 같은 LAN 공격자가 메모리를 소모할 수 있음                                      | device 256, service name 512 상한과 오래된 unpaired 항목 eviction             | discovery flood 회귀 테스트                               |
+| F-06 | MEDIUM | 완료·실패·취소된 Nearby 전송 기록이 Rust/React 메모리에서 무제한 누적                                                  | 양쪽 모두 terminal history 200개 제한, active 전송 보존                       | Rust와 Vitest history flood 테스트                        |
+| F-07 | MEDIUM | 공유 종료 API 실패를 무시하고 control key와 UI 상태를 먼저 지워 링크를 다시 종료할 수 없었음                           | 서버 DELETE 성공/404 확인 후에만 로컬 상태 제거, 실패 시 재시도 상태 유지     | lint/typecheck/unit/build 및 failure path 검토            |
+| F-08 | MEDIUM | macOS 앱 메뉴의 Quit가 tray 종료 확인을 우회해 활성 링크가 남을 수 있음                                                | native `ExitRequested`를 가로채 활성 작업이 있으면 WebView 확인 흐름으로 전달 | 실제 앱 조작으로 재현, Rust exit gate 테스트              |
+| F-09 | LOW    | 운영 HTTPS 응답에 HSTS가 없음                                                                                          | `Strict-Transport-Security: max-age=31536000` 추가                            | 로컬/운영 header 테스트                                   |
 
 ## 자동 검증 결과
 
-| 검증                                        | 결과               | 증거                                                                  |
-| ------------------------------------------- | ------------------ | --------------------------------------------------------------------- |
-| `pnpm check`                                | PASS               | lint, strict typecheck, 59 tests, desktop/web/server production build |
-| `cargo fmt --check`                         | PASS               | Rust formatting                                                       |
-| `cargo clippy --all-targets -- -D warnings` | PASS               | 모든 target, warning denied                                           |
-| `cargo test --all-targets`                  | PASS               | 21 tests                                                              |
-| `pnpm audit --prod --audit-level high`      | PASS               | 알려진 vulnerability 0                                                |
-| `cargo audit`                               | PASS with warnings | vulnerability 0, 전이 의존성 유지보수/unsound warning 17건            |
+| 검증                                                       | 결과                                                                         |
+| ---------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| `pnpm check`                                               | PASS — lint, strict typecheck, 69 tests, desktop/web/server production build |
+| `cargo fmt --check`                                        | PASS                                                                         |
+| `cargo clippy --all-targets --all-features -- -D warnings` | PASS                                                                         |
+| `cargo test --all-targets --all-features`                  | PASS — 24 tests                                                              |
+| `pnpm audit --prod --audit-level high`                     | PASS — 알려진 취약점 0                                                       |
+| `cargo audit`                                              | PASS with warnings — 취약점 0, 허용 경고 17                                  |
+| `gitleaks git --all --redact`                              | PASS — 32 commits, secret 0                                                  |
+| public verify                                              | PASS — HTTPS, API, WSS, registration, presence                               |
+| macOS arm64 app/DMG                                        | PASS — ad-hoc code signature valid, DMG checksum valid                       |
 
-`cargo audit` 경고는 Tauri의 Linux GTK3 계열 전이 의존성과 `proc-macro-error`, `unic-*`, `glib`에 관한 것입니다. 현재 audit은 취약점으로 분류하지 않았으며, upstream Tauri/WebKitGTK 의존성 갱신과 함께 계속 추적합니다.
+`cargo audit`의 17개 경고는 Tauri lockfile에 포함된 Linux GTK3 계열, `proc-macro-error`, `unic-*`, `glib` 전이 의존성의 유지보수/unsound 경고입니다. 이번 macOS/Windows 릴리스 경로의 확인된 취약점은 아니지만 upstream 갱신을 계속 추적합니다.
 
-## 실제 Nearby E2E
+## Nearby 검증
 
-| 단계                                 | 결과                                                                      |
-| ------------------------------------ | ------------------------------------------------------------------------- |
-| 별도 identity·certificate 생성       | PASS                                                                      |
-| `_directdrop._tcp.local` 광고와 발견 | PASS                                                                      |
-| 6자리 pairing code 양쪽 일치         | PASS                                                                      |
-| pinned TLS와 paired HMAC 인증        | PASS                                                                      |
-| 수신자 파일 제안 표시·수동 승인      | PASS                                                                      |
-| `README.md` 5,835 bytes 전송         | PASS                                                                      |
-| 송신/수신 history `COMPLETED`        | PASS                                                                      |
-| 원본/수신 SHA-256 일치               | PASS (`c961d78751ce1a82988ad7bab0fbd76deaf9050874cd932cf2532c7975b2601d`) |
-| 테스트 trust/data/history 정리       | PASS                                                                      |
+현재 회귀 테스트는 다음 공격·오류 경로를 직접 확인합니다.
 
-이 검증 중 동기 Tauri command에서 `tokio::spawn`을 호출해 main thread가 panic하던 실제 결함을 발견했습니다. outbound task를 `tauri::async_runtime::spawn`으로 실행하도록 수정하고 동일 E2E를 다시 통과했습니다.
+- self-signed certificate fingerprint 고정 TLS와 pairing HMAC tamper 거부
+- private/link-local 주소 제한, connection/IP rate limit, bounded mDNS state
+- hostile path·Windows reserved name·symlink·손상 chunk 거부
+- resume manifest/offset 검증, non-overwrite destination, empty file
+- pause/resume/cancel, 4 GiB 초과 offset, bounded terminal history
+- native quit 시 active share 보호
 
-## Nearby 기능 감사
+같은 날 별도 identity와 data directory를 가진 macOS arm64 앱 2개로 수행한 실제 Nearby E2E에서는 mDNS 발견, 6자리 pairing, 수신 승인, `README.md` 5,835 bytes 전송, 양쪽 `COMPLETED`, SHA-256 일치를 확인했습니다. 이번 수정 후에는 해당 경로의 Rust 회귀 24개와 macOS arm64 release build를 다시 통과했습니다.
 
-| 기능                     | 결과 | 범위                                                            |
-| ------------------------ | ---- | --------------------------------------------------------------- |
-| Persistent identity      | PASS | UUID, self-signed cert/key, Unix `0600`, atomic backup          |
-| Device discovery         | PASS | mDNS browse/advertise, bounded TXT metadata, local address 제한 |
-| Secure pairing           | PASS | 6자리 code, certificate pin, HMAC proof, trust revoke           |
-| File/folder queue        | PASS | 다중 파일, 폴더, 빈 파일, symlink 거부                          |
-| Streaming integrity      | PASS | 1 MiB bounded chunks, chunk SHA-256, exact offset ACK           |
-| Pause/resume/cancel      | PASS | protocol/state/unit tests; physical interruption soak는 후속    |
-| Retry/resume persistence | PASS | manifest hash, partial offset, 최대 3회 재시도                  |
-| Receive safety           | PASS | 수동 승인 기본, partial 격리, non-overwrite 이동                |
-| History/settings         | PASS | 송수신 내역, 받은 파일, 저장 위치, trust 관리                   |
+## 운영 반영
 
-## 보안 결과
+- 운영 URL: `https://share.dlfkd.dev`
+- health: version `0.2.0`, `fileStorage: false`
+- server bind: `127.0.0.1:8787`, Cloudflare Tunnel만 외부 진입
+- cleanup: `BACKGROUND_CLEANUP_MODE=always`
+- stale metadata: share 17건/file row 19건 → 0/0
+- 사전 백업: `~/Library/Application Support/DirectDrop/backups/security-audit-20260817-134901/server.sqlite3`
+- backup/live DB `PRAGMA integrity_check`: PASS
+- HSTS, CSP, frame, MIME, referrer, permissions, cache, robots header: PASS
+- 공개 HTTPS/API/WSS/share registration/presence: PASS
 
-| 심각도   | 남은 수 |
-| -------- | ------: |
-| CRITICAL |       0 |
-| HIGH     |       0 |
-| MEDIUM   |       6 |
-| LOW      |       2 |
+로컬 최종 DMG: `DirectDrop_0.2.0_aarch64.dmg`
 
-상세 threat model은 [security-audit.md](security-audit.md)에 기록했습니다. 주요 남은 위험은 미서명 installer 경고, 서로 다른 물리 OS/공유기 조합의 제한된 실측, public Wi-Fi 오인 가능성, 의도적으로 비활성화한 Browser LAN/clipboard 기능입니다.
+SHA-256: `a8819ab388aef965e0f4a5f38b39b6f01e6fa51197e8dbd9be332ea94815abcf`
 
-## 패키지와 배포 정책
+서버는 파일 본문이나 송신자의 절대 경로를 저장하지 않습니다. 이번 cleanup은 SQLite의 공유 토큰·파일명·크기 같은 메타데이터만 제거했습니다.
 
-### macOS
+## 남은 제한
 
-- Apple Silicon과 Intel DMG를 GitHub Actions에서 각각 생성합니다.
-- Developer ID signing/notarization은 이번 범위에서 제외합니다.
-- 사용자는 Gatekeeper가 차단할 때 아래 명령으로 quarantine을 제거한 뒤 실행할 수 있습니다.
-
-```bash
-xattr -dr com.apple.quarantine /Applications/DirectDrop.app
-open /Applications/DirectDrop.app
-```
-
-### Windows
-
-- Windows x64 NSIS EXE와 MSI를 GitHub Actions에서 생성합니다.
-- Windows code signing이 없으므로 SmartScreen 경고가 표시될 수 있습니다.
-
-### Artifact 무결성
-
-- 공개 릴리스: <https://github.com/HechoLP/DirectDrop/releases/tag/v0.2.0>
-- GitHub CI `31990090144`: web/server, macOS native, Windows native PASS
-- Release workflow `31990446156`: ARM DMG, Intel DMG, Windows NSIS EXE/MSI, checksum PASS
-- 공개 installer 4개를 다시 다운로드해 `SHA256SUMS.txt`와 모두 일치함을 확인했습니다.
-- 두 DMG는 `hdiutil verify` PASS, 내부 binary는 각각 arm64와 x86_64, ad-hoc signature와 Local Network/Bonjour declaration을 확인했습니다.
-- Windows asset은 NSIS PE executable과 x64 MSI installer 형식을 확인했습니다.
-
-### Production
-
-- `https://share.dlfkd.dev/health`: version `0.2.0`, `fileStorage: false`
-- HTTPS, API, WSS, share registration/presence/cleanup 실제 검증 PASS
-- 허용되지 않은 WebSocket Origin은 code `1008`, `origin not allowed`로 차단
-- CSP, MIME, frame, referrer, permissions, noindex response header 확인
-- 공개 랜딩의 JS/CSS asset HTTP 200과 immutable cache 확인
-- 브라우저 1280 px viewport에서 `scrollWidth === innerWidth` 확인
-- 이전 runtime bundle은 local rollback backup으로 보존
-
-## 남은 검증 범위
-
-- 서로 다른 두 물리 장치의 macOS/Windows 교차 전송
-- 1 GiB 이상, 느린 디스크, sleep/wake, 장시간 재연결 soak
-- Windows 설치·제거와 SmartScreen 실제 화면
-- Chrome/Edge/Safari/Firefox Share Link 실제 대용량 저장
-- 서로 다른 네트워크와 브라우저 환경의 장기 운영 관찰
-
-이 항목들은 구현 누락을 뜻하지 않으며, 현재 로컬 검증을 넘어서는 release/physical evidence입니다.
+| 심각도 | 제한                                                            | 권고                                                    |
+| ------ | --------------------------------------------------------------- | ------------------------------------------------------- |
+| MEDIUM | Apple Developer ID 서명·공증 없음                               | 요청 범위에서 제외. SHA-256 제공과 Gatekeeper 안내 유지 |
+| MEDIUM | Windows code signing 없음                                       | SmartScreen 경고 고지, 향후 서명 인증서 적용            |
+| MEDIUM | 서로 다른 물리 OS/공유기와 1 GiB+ 장시간 전송 재검증 필요       | release 전 실장비 soak matrix 수행                      |
+| MEDIUM | TURN 미구성 시 일부 NAT 환경에서 Share Link 직접 연결 실패 가능 | 운영 규모 증가 시 TURN 추가                             |
+| MEDIUM | VPN/가상 사설 adapter를 일반 LAN과 완전히 구분하기 어려움       | manual receive 기본값과 Nearby off 제공 유지            |
+| LOW    | source 변경 검사가 size와 millisecond mtime 기반                | 향후 전송 전/중 파일 identity 강화 검토                 |
+| LOW    | local transfer history에 표시 파일명이 최대 200개 남음          | clear-history UI와 보존 기간 설정 검토                  |
 
 ## Release Gate
 
-| Gate                              | 상태                    |
-| --------------------------------- | ----------------------- |
-| CRITICAL/HIGH = 0                 | PASS                    |
-| Workspace/Rust 자동 검증          | PASS                    |
-| 실제 Nearby mDNS→TLS→전송→hash    | PASS                    |
-| macOS arm64 local release app     | PASS                    |
-| 현재 commit GitHub CI             | PASS                    |
-| ARM/Intel macOS/Windows artifact  | PASS                    |
-| 공개 SHA256/DMG/installer 검증    | PASS                    |
-| 운영 `share.dlfkd.dev` v0.2.0     | PASS                    |
-| Developer ID signing/notarization | 사용자 요청에 따라 제외 |
+| Gate                               | 상태                 |
+| ---------------------------------- | -------------------- |
+| CRITICAL/HIGH = 0                  | PASS                 |
+| workspace/Rust regression          | PASS                 |
+| dependency/secret audit            | PASS                 |
+| macOS arm64 local release app/DMG  | PASS                 |
+| 운영 server security patch         | PASS                 |
+| 공개 HTTPS/API/WSS E2E             | PASS                 |
+| 물리 macOS↔Windows/large-file soak | KNOWN LIMITATION     |
+| Developer ID signing/notarization  | 사용자 요청으로 제외 |
 
-**최종 판정: DirectDrop v0.2.0 릴리스와 운영 배포 완료. Developer ID 서명·공증만 요청 범위에서 제외.**
+**최종 판정: 알려진 제한을 명시한 상태에서 최종 테스트 및 제한적 배포 준비 완료.**

@@ -32,9 +32,11 @@
 | N-08 | resume state substitution              | transfer ID 형식 제한, saved manifest hash와 partial length 검증                                                       |
 | N-09 | 기존 수신 파일 overwrite               | completion 뒤 unique `(n)` destination으로만 이동                                                                      |
 | N-10 | memory/socket DoS                      | 1 MiB frame/chunk, 10,000 file bound, stop-and-wait ACK backpressure, 16 concurrent connection, IP당 분당 60회 제한    |
-| N-11 | 무인 파일 투입                         | trusted device도 기본 manual receive, 기기별 auto receive는 명시적 opt-in                                              |
-| N-12 | partial cleanup이 다른 파일 삭제       | `<download>/.directdrop-partial/<validated transferId>`만 삭제, 원본 경로 삭제 API 없음                                |
-| N-13 | identity file 중간 손상·권한 노출      | temp write + sync + previous backup, Unix identity/history `0600`, size/structure validation                           |
+| N-11 | mDNS state exhaustion                  | device 256개/service name 512개 상한, 오래된 unpaired device 우선 eviction                                             |
+| N-12 | transfer history memory growth         | Rust와 React 모두 terminal history 200개 상한, active 전송은 보존                                                      |
+| N-13 | 무인 파일 투입                         | trusted device도 기본 manual receive, 기기별 auto receive는 명시적 opt-in                                              |
+| N-14 | partial cleanup이 다른 파일 삭제       | `<download>/.directdrop-partial/<validated transferId>`만 삭제, 원본 경로 삭제 API 없음                                |
+| N-15 | identity file 중간 손상·권한 노출      | temp write + sync + previous backup, Unix identity/history `0600`, size/structure validation                           |
 
 Pairing의 6자리 code는 사용자가 양쪽 화면을 실제로 비교하는 것을 전제로 합니다. 코드를 비교하지 않고 승인하면 잘못된 device를 신뢰할 수 있으므로 UI에서 불일치 시 취소하도록 명시합니다.
 
@@ -48,18 +50,23 @@ Pairing의 6자리 code는 사용자가 양쪽 화면을 실제로 비교하는 
 - password는 Argon2id hash로 저장하며 short-lived access grant를 사용합니다.
 - server·Cloudflare에 file bytes와 sender absolute path를 저장하지 않습니다.
 - response CSP, frame/MIME/referrer/permissions/noindex header를 설정합니다.
+- loopback Cloudflare proxy만 신뢰해 client IP rate-limit bucket을 분리하고 HSTS를 적용합니다.
+- signaling active connection을 전역 1,000개/IP당 16개로 제한합니다.
+- terminal share는 파일명·크기를 숨기고 password grant 발급을 중단합니다.
+- `expires_at`이 지난 metadata를 조회 여부와 관계없이 자동 삭제합니다.
 - third-party GitHub Actions는 full commit SHA에 고정합니다.
 
 ## 검증 결과
 
 - CRITICAL: 0
 - HIGH: 0
-- Rust: identity persistence, pinned TLS loopback, pairing/HMAC tamper, frame bound, hostile path, corrupt chunk, resume, non-overwrite, empty file, >4 GiB offset, rate limit tests
+- Rust: identity persistence, pinned TLS loopback, pairing/HMAC tamper, frame bound, hostile path, corrupt chunk, resume, non-overwrite, empty file, >4 GiB offset, rate limit, discovery/history bound, native exit tests
 - 실제 Nearby E2E: 서로 격리된 앱 2개에서 mDNS 발견, 6자리 pairing, 신뢰 저장, 수신 승인, 5,835 byte 전송, 양쪽 완료와 SHA-256 일치
 - TypeScript: strict relative path schema를 포함한 protocol tests
-- Workspace: lint, strict typecheck, unit tests, production build
+- Workspace: lint, strict typecheck, 69 unit/integration tests, production build
 - Dependency audit: npm/Cargo 알려진 vulnerability 0; Tauri/GTK3 등 전이 의존성 유지보수·unsound warning 17건 추적
 - Rust 제품 코드에 `unsafe` block, shell command execution, arbitrary URL open command 없음
+- 운영 stale metadata 17 share/19 file row를 일관된 backup 후 0/0으로 정리하고 DB 무결성 확인
 
 전체 명령과 OS 범위는 [test-matrix.md](test-matrix.md)를 참고하세요.
 
