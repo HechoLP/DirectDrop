@@ -8,7 +8,7 @@
 
 **판정: READY WITH KNOWN LIMITATIONS**
 
-이번 최종 감사에서 CRITICAL/HIGH 취약점은 확인되지 않았습니다. 운영 또는 장시간 사용에서 문제가 될 수 있는 MEDIUM 8건과 LOW 1건을 재현하거나 코드 경로로 확인해 모두 수정했습니다. 서버 수정은 `share.dlfkd.dev` 운영 환경에 반영했고, 만료·중지된 공유 메타데이터도 백업 후 자동 정리했습니다.
+이번 최종 감사에서 CRITICAL/HIGH 취약점은 확인되지 않았습니다. 운영 또는 장시간 사용에서 문제가 될 수 있는 MEDIUM 8건과 LOW 2건을 재현하거나 코드 경로로 확인해 모두 수정했습니다. 서버 수정은 `share.dlfkd.dev` 운영 환경에 반영했고, 만료·중지된 공유 메타데이터도 백업 후 자동 정리했습니다.
 
 Apple Developer ID 서명·공증은 사용자 요청에 따라 범위에서 제외합니다. 서로 다른 물리 Mac/Windows 장치, 여러 공유기, 1 GiB 이상 파일의 장시간 전송은 별도 실장비 매트릭스가 남아 있습니다.
 
@@ -25,6 +25,7 @@ Apple Developer ID 서명·공증은 사용자 요청에 따라 범위에서 제
 | F-07 | MEDIUM | 공유 종료 API 실패를 무시하고 control key와 UI 상태를 먼저 지워 링크를 다시 종료할 수 없었음                           | 서버 DELETE 성공/404 확인 후에만 로컬 상태 제거, 실패 시 재시도 상태 유지     | lint/typecheck/unit/build 및 failure path 검토            |
 | F-08 | MEDIUM | macOS 앱 메뉴의 Quit가 tray 종료 확인을 우회해 활성 링크가 남을 수 있음                                                | native `ExitRequested`를 가로채 활성 작업이 있으면 WebView 확인 흐름으로 전달 | 실제 앱 조작으로 재현, Rust exit gate 테스트              |
 | F-09 | LOW    | 운영 HTTPS 응답에 HSTS가 없음                                                                                          | `Strict-Transport-Security: max-age=31536000` 추가                            | 로컬/운영 header 테스트                                   |
+| F-10 | LOW    | CI/Release의 고정 GitHub Actions가 폐기 예정 Node 20 runtime을 사용                                                    | 공식 Node 24 기반 최신 release commit SHA로 재고정                            | GitHub CI에서 warning 없이 재검증                         |
 
 ## 자동 검증 결과
 

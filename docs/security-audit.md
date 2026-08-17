@@ -55,6 +55,7 @@ Pairing의 6자리 code는 사용자가 양쪽 화면을 실제로 비교하는 
 - terminal share는 파일명·크기를 숨기고 password grant 발급을 중단합니다.
 - `expires_at`이 지난 metadata를 조회 여부와 관계없이 자동 삭제합니다.
 - third-party GitHub Actions는 full commit SHA에 고정합니다.
+- CI/Release action은 Node 24 기반 최신 공식 release commit SHA에 고정합니다.
 
 ## 검증 결과
 
