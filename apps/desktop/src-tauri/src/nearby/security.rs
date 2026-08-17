@@ -112,6 +112,16 @@ pub async fn inspect_staged_files(
 }
 
 pub async fn apply_platform_protection(root: &Path, transfer_id: &str) -> Result<(), NearbyError> {
+    if transfer_id.len() < 8
+        || transfer_id.len() > 128
+        || !transfer_id
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
+    {
+        return Err(NearbyError::Security(
+            "보호 메타데이터에 사용할 수 없는 전송 식별자입니다.".to_owned(),
+        ));
+    }
     let root = root.to_path_buf();
     let transfer_id = transfer_id.to_owned();
     tokio::task::spawn_blocking(move || protect_tree(&root, &transfer_id))
@@ -264,7 +274,7 @@ fn protect_tree(root: &Path, transfer_id: &str) -> Result<(), NearbyError> {
             #[cfg(unix)]
             clear_executable_bits(&path, &metadata)?;
             #[cfg(windows)]
-            apply_windows_mark_of_the_web(&path)?;
+            apply_windows_mark_of_the_web(&path, transfer_id)?;
         } else {
             return Err(NearbyError::Security(
                 "격리 영역에 지원하지 않는 항목이 있습니다.".to_owned(),
@@ -300,13 +310,16 @@ fn apply_macos_quarantine(path: &Path, transfer_id: &str) -> Result<(), NearbyEr
 }
 
 #[cfg(windows)]
-fn apply_windows_mark_of_the_web(path: &Path) -> Result<(), NearbyError> {
+fn apply_windows_mark_of_the_web(path: &Path, transfer_id: &str) -> Result<(), NearbyError> {
     use std::os::windows::ffi::{OsStrExt, OsStringExt};
 
     let mut stream = path.as_os_str().encode_wide().collect::<Vec<_>>();
     stream.extend(":Zone.Identifier".encode_utf16());
     let stream = std::ffi::OsString::from_wide(&stream);
-    std::fs::write(Path::new(&stream), b"[ZoneTransfer]\r\nZoneId=3\r\n").map_err(|error| {
+    let metadata = format!(
+        "[ZoneTransfer]\r\nZoneId=3\r\nHostUrl=nearby://{transfer_id}\r\nReferrerUrl=DirectDrop\r\n"
+    );
+    std::fs::write(Path::new(&stream), metadata.as_bytes()).map_err(|error| {
         NearbyError::Security(format!(
             "Windows 인터넷 출처 표시를 적용하지 못했습니다: {error}"
         ))
@@ -360,5 +373,36 @@ mod tests {
             .reasons
             .contains(&"EXECUTABLE_CONTENT_MISMATCH".to_owned()));
         fs::remove_dir_all(root).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn rejects_transfer_identifiers_that_could_inject_provenance_metadata() {
+        let root = std::env::temp_dir().join(format!("directdrop-origin-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&root).await.unwrap();
+        let error = apply_platform_protection(&root, "transfer\r\nZoneId=0")
+            .await
+            .unwrap_err();
+        assert!(matches!(error, NearbyError::Security(_)));
+        fs::remove_dir_all(root).await.unwrap();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn writes_windows_mark_of_the_web_with_transfer_origin() {
+        use std::os::windows::ffi::{OsStrExt, OsStringExt};
+
+        let path =
+            std::env::temp_dir().join(format!("directdrop-zone-{}.txt", uuid::Uuid::new_v4()));
+        std::fs::write(&path, b"received").unwrap();
+        apply_windows_mark_of_the_web(&path, "transfer-12345678").unwrap();
+
+        let mut stream = path.as_os_str().encode_wide().collect::<Vec<_>>();
+        stream.extend(":Zone.Identifier".encode_utf16());
+        let stream = std::ffi::OsString::from_wide(&stream);
+        let metadata = std::fs::read_to_string(Path::new(&stream)).unwrap();
+        assert!(metadata.contains("ZoneId=3"));
+        assert!(metadata.contains("HostUrl=nearby://transfer-12345678"));
+
+        std::fs::remove_file(path).unwrap();
     }
 }
