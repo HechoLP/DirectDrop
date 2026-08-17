@@ -33,6 +33,7 @@ use super::{
         read_chunk, read_message, write_chunk, write_message, LanFile, WireMessage,
         CERTIFICATE_REQUEST_MAGIC, LAN_PROTOCOL_VERSION, MAX_CHUNK_BYTES,
     },
+    security::{assess_manifest, FileSecurityAssessment},
     storage::{sha256_hex, validate_manifest, LocalSource, ReceiveSession},
     NearbyError,
 };
@@ -144,6 +145,8 @@ pub struct IncomingTransferOffer {
     pub device_name: String,
     pub files: Vec<LanFile>,
     pub total_bytes: u64,
+    pub confirmation_stage: String,
+    pub security: FileSecurityAssessment,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -175,6 +178,7 @@ struct ApprovedIncomingTransfer {
     device_id: String,
     files: Vec<LanFile>,
     total_bytes: u64,
+    explicit_approval: bool,
     expires_at: Instant,
 }
 
@@ -614,6 +618,57 @@ impl NearbyManager {
         sender.send(accepted).map_err(|_| NearbyError::NotFound)
     }
 
+    async fn request_transfer_approval(
+        &self,
+        transfer_id: &str,
+        trusted: &TrustedDevice,
+        files: &[LanFile],
+        total_bytes: u64,
+        confirmation_stage: &str,
+        security: FileSecurityAssessment,
+    ) -> Result<bool, NearbyError> {
+        let (sender, receiver) = oneshot::channel();
+        {
+            let mut decisions = self
+                .inner
+                .transfer_decisions
+                .lock()
+                .map_err(|_| NearbyError::StateUnavailable)?;
+            if decisions.len() >= MAX_CONCURRENT_CONNECTIONS || decisions.contains_key(transfer_id)
+            {
+                return Err(NearbyError::Busy);
+            }
+            decisions.insert(transfer_id.to_owned(), sender);
+        }
+        if let Err(error) = self.inner.app.emit(
+            "nearby-transfer-offer",
+            IncomingTransferOffer {
+                transfer_id: transfer_id.to_owned(),
+                device_id: trusted.device_id.clone(),
+                device_name: trusted.device_name.clone(),
+                files: files.to_vec(),
+                total_bytes,
+                confirmation_stage: confirmation_stage.to_owned(),
+                security,
+            },
+        ) {
+            if let Ok(mut decisions) = self.inner.transfer_decisions.lock() {
+                decisions.remove(transfer_id);
+            }
+            return Err(NearbyError::Protocol(format!(
+                "could not show the transfer approval: {error}"
+            )));
+        }
+        let decision = match timeout(TRANSFER_DECISION_TIMEOUT, receiver).await {
+            Ok(result) => result.map_err(|_| NearbyError::Cancelled),
+            Err(_) => Err(NearbyError::Timeout),
+        };
+        if let Ok(mut decisions) = self.inner.transfer_decisions.lock() {
+            decisions.remove(transfer_id);
+        }
+        decision
+    }
+
     pub fn pause_transfer(&self, transfer_id: &str) -> Result<(), NearbyError> {
         let direction = self
             .inner
@@ -861,10 +916,17 @@ impl NearbyManager {
             },
         )
         .await?;
-        match read_message_controlled(&mut stream, &control, &plan.transfer_id, CONNECTION_TIMEOUT)
-            .await?
+        match read_message_controlled(
+            &mut stream,
+            &control,
+            &plan.transfer_id,
+            TRANSFER_DECISION_TIMEOUT,
+        )
+        .await?
         {
             WireMessage::CompleteAck { transfer_id } if transfer_id == plan.transfer_id => {}
+            WireMessage::Error { message, .. } => return Err(NearbyError::Protocol(message)),
+            WireMessage::Cancel { .. } => return Err(NearbyError::Cancelled),
             _ => {
                 return Err(NearbyError::Protocol(
                     "completion acknowledgement expected".to_owned(),
@@ -1188,36 +1250,26 @@ impl NearbyManager {
             error: None,
             updated_at: now_millis(),
         });
-        let resume_approved =
-            self.has_resume_approval(&transfer_id, &trusted.device_id, &files, total_bytes)?;
-        let accepted = if trusted.auto_accept_files || resume_approved {
-            true
+        let initial_security = assess_manifest(&files);
+        let resume_approval =
+            self.resume_approval(&transfer_id, &trusted.device_id, &files, total_bytes)?;
+        let (accepted, explicitly_approved) = if let Some(explicit) = resume_approval {
+            (true, explicit)
+        } else if trusted.auto_accept_files && !initial_security.requires_explicit_approval {
+            (true, false)
         } else {
-            let (sender, receiver) = oneshot::channel();
-            self.inner
-                .transfer_decisions
-                .lock()
-                .map_err(|_| NearbyError::StateUnavailable)?
-                .insert(transfer_id.clone(), sender);
-            let _ = self.inner.app.emit(
-                "nearby-transfer-offer",
-                IncomingTransferOffer {
-                    transfer_id: transfer_id.clone(),
-                    device_id: trusted.device_id.clone(),
-                    device_name: trusted.device_name.clone(),
-                    files: files.clone(),
+            match self
+                .request_transfer_approval(
+                    &transfer_id,
+                    &trusted,
+                    &files,
                     total_bytes,
-                },
-            );
-            let decision = match timeout(TRANSFER_DECISION_TIMEOUT, receiver).await {
-                Ok(result) => result.map_err(|_| NearbyError::Cancelled),
-                Err(_) => Err(NearbyError::Timeout),
-            };
-            if let Ok(mut decisions) = self.inner.transfer_decisions.lock() {
-                decisions.remove(&transfer_id);
-            }
-            match decision {
-                Ok(accepted) => accepted,
+                    "BEFORE_TRANSFER",
+                    initial_security.clone(),
+                )
+                .await
+            {
+                Ok(accepted) => (accepted, accepted),
                 Err(error) => {
                     self.set_transfer_status(&transfer_id, "FAILED", Some(error.to_string()));
                     self.clear_incoming_approval(&transfer_id);
@@ -1239,7 +1291,13 @@ impl NearbyManager {
             self.clear_incoming_approval(&transfer_id);
             return result;
         }
-        self.remember_incoming_approval(&transfer_id, &trusted.device_id, &files, total_bytes)?;
+        self.remember_incoming_approval(
+            &transfer_id,
+            &trusted.device_id,
+            &files,
+            total_bytes,
+            explicitly_approved,
+        )?;
         let download_directory =
             PathBuf::from(self.inner.identity.preferences()?.download_directory);
         let (mut session, offsets) =
@@ -1334,6 +1392,62 @@ impl NearbyManager {
                     WireMessage::Complete {
                         transfer_id: incoming_id,
                     } if incoming_id == transfer_id => {
+                        let inspected_security = session.inspect_security().await?;
+                        let needs_second_approval = inspected_security.risk_rank()
+                            > initial_security.risk_rank()
+                            || (inspected_security.requires_explicit_approval
+                                && !explicitly_approved);
+                        if needs_second_approval {
+                            self.set_transfer_status(&transfer_id, "WAITING", None);
+                            let decision = self
+                                .request_transfer_approval(
+                                    &transfer_id,
+                                    &trusted,
+                                    &files,
+                                    total_bytes,
+                                    "AFTER_INSPECTION",
+                                    inspected_security,
+                                )
+                                .await;
+                            match decision {
+                                Ok(true) => {
+                                    self.remember_incoming_approval(
+                                        &transfer_id,
+                                        &trusted.device_id,
+                                        &files,
+                                        total_bytes,
+                                        true,
+                                    )?;
+                                    self.set_transfer_status(&transfer_id, "TRANSFERRING", None);
+                                }
+                                Ok(false) => {
+                                    let _ = write_message(
+                                        &mut stream,
+                                        &WireMessage::Error {
+                                            code: "SECURITY_REJECTED".to_owned(),
+                                            message:
+                                                "수신자가 파일 내용 확인 후 저장을 거절했습니다."
+                                                    .to_owned(),
+                                        },
+                                    )
+                                    .await;
+                                    session.cancel().await?;
+                                    break Err(NearbyError::Cancelled);
+                                }
+                                Err(error) => {
+                                    let _ = write_message(
+                                        &mut stream,
+                                        &WireMessage::Error {
+                                            code: "SECURITY_CONFIRMATION_FAILED".to_owned(),
+                                            message: error.to_string(),
+                                        },
+                                    )
+                                    .await;
+                                    session.cancel().await?;
+                                    break Err(error);
+                                }
+                            }
+                        }
                         let _destinations = session.complete().await?;
                         write_message(
                             &mut stream,
@@ -1587,13 +1701,13 @@ impl NearbyManager {
             .ok_or(NearbyError::NotFound)
     }
 
-    fn has_resume_approval(
+    fn resume_approval(
         &self,
         transfer_id: &str,
         device_id: &str,
         files: &[LanFile],
         total_bytes: u64,
-    ) -> Result<bool, NearbyError> {
+    ) -> Result<Option<bool>, NearbyError> {
         let now = Instant::now();
         let mut approvals = self
             .inner
@@ -1601,10 +1715,11 @@ impl NearbyManager {
             .lock()
             .map_err(|_| NearbyError::StateUnavailable)?;
         approvals.retain(|_, approval| approval.expires_at > now);
-        Ok(approvals.get(transfer_id).is_some_and(|approval| {
-            approval.device_id == device_id
+        Ok(approvals.get(transfer_id).and_then(|approval| {
+            (approval.device_id == device_id
                 && approval.total_bytes == total_bytes
-                && approval.files == files
+                && approval.files == files)
+                .then_some(approval.explicit_approval)
         }))
     }
 
@@ -1614,6 +1729,7 @@ impl NearbyManager {
         device_id: &str,
         files: &[LanFile],
         total_bytes: u64,
+        explicit_approval: bool,
     ) -> Result<(), NearbyError> {
         let now = Instant::now();
         let mut approvals = self
@@ -1637,6 +1753,7 @@ impl NearbyManager {
                 device_id: device_id.to_owned(),
                 files: files.to_vec(),
                 total_bytes,
+                explicit_approval,
                 expires_at: now + RESUME_APPROVAL_TTL,
             },
         );

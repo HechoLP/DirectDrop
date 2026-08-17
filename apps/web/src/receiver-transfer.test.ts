@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { PROTOCOL_VERSION, type PublicFile } from "@directdrop/protocol";
 import {
   IncomingTransferValidator,
+  verifyActiveContentMatchesMetadata,
   verifyChunkIntegrity,
 } from "./receiver-transfer";
 
@@ -51,6 +52,35 @@ describe("incoming transfer validation", () => {
     await expect(verifyChunkIntegrity(chunk, "0".repeat(64))).rejects.toThrow(
       "CHUNK_INTEGRITY_MISMATCH",
     );
+  });
+
+  it("blocks renamed executable bytes before writing the first chunk", () => {
+    const pe = new Uint8Array(128);
+    pe.set([0x4d, 0x5a]);
+    new DataView(pe.buffer).setUint32(0x3c, 64, true);
+    pe.set([0x50, 0x45, 0, 0], 64);
+    expect(() =>
+      verifyActiveContentMatchesMetadata(
+        {
+          id: "renamed-file",
+          name: "invoice.pdf",
+          size: pe.byteLength,
+          mimeType: "application/pdf",
+        },
+        pe.buffer,
+      ),
+    ).toThrow("실행 가능한 형식");
+    expect(() =>
+      verifyActiveContentMatchesMetadata(
+        {
+          id: "declared-executable",
+          name: "installer.exe",
+          size: pe.byteLength,
+          mimeType: "application/vnd.microsoft.portable-executable",
+        },
+        pe.buffer,
+      ),
+    ).not.toThrow();
   });
 
   it("accepts an exact ordered transfer including a zero-byte file", () => {
@@ -127,8 +157,8 @@ describe("incoming transfer validation", () => {
 
     const incomplete = new IncomingTransferValidator(files);
     incomplete.control(manifest());
-    expect(() =>
-      incomplete.control({ type: "TRANSFER_COMPLETE" }),
-    ).toThrow("INCOMPLETE_TRANSFER");
+    expect(() => incomplete.control({ type: "TRANSFER_COMPLETE" })).toThrow(
+      "INCOMPLETE_TRANSFER",
+    );
   });
 });

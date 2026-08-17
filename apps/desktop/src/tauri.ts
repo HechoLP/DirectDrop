@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { PublicFile } from "@directdrop/protocol";
+import type { FileSecurityAssessment } from "@directdrop/shared";
 
 export const isTauri = () => "__TAURI_INTERNALS__" in window;
 
@@ -117,6 +118,8 @@ export type NearbyTransferOffer = {
   deviceName: string;
   files: NearbyFile[];
   totalBytes: number;
+  confirmationStage: "BEFORE_TRANSFER" | "AFTER_INSPECTION";
+  security: FileSecurityAssessment;
 };
 
 export async function getNearbyStatus() {

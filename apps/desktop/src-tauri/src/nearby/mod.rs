@@ -1,6 +1,7 @@
 mod identity;
 mod manager;
 mod protocol;
+mod security;
 mod storage;
 
 use serde::Serialize;
@@ -34,6 +35,8 @@ pub enum NearbyError {
     UnsafePath,
     #[error("전송 데이터 무결성 검증에 실패했습니다.")]
     Integrity,
+    #[error("수신 파일 보호 처리에 실패했습니다: {0}")]
+    Security(String),
     #[error("원본 파일이 변경되었습니다: {0}")]
     SourceChanged(String),
     #[error("잘못된 요청입니다: {0}")]
