@@ -36,6 +36,10 @@
 | Disconnect retry     | PASS / state         | 동일 transfer ID로 최대 3회 재연결, receiver offset 재사용                          |
 | >4 GiB offset        | PASS                 | sparse file 마지막 byte native range read                                           |
 | 1 GiB+ full transfer | PHYSICAL TEST NEEDED | unit path와 bounded buffer는 통과, 별도 두 장치 soak 필요                           |
+| Risky extension      | PASS / automated     | 실행·script·macro는 HIGH, archive/disk image는 CAUTION, 자동 수신 제외              |
+| Renamed executable   | PASS / automated     | PE/ELF/Mach-O/shebang 실제 header가 metadata와 다르면 최종 저장 전 재승인           |
+| macOS provenance     | PASS / automated     | 최종 파일에 `com.apple.quarantine` 유지 확인                                        |
+| Filename mismatch    | PASS / automated     | 표시 name과 상대 경로 basename 불일치 manifest 거부                                 |
 
 ## OS matrix
 
@@ -60,7 +64,7 @@
 | Gate                                    | 현재 상태                        |
 | --------------------------------------- | -------------------------------- |
 | `pnpm check`                            | PASS locally                     |
-| Rust fmt/clippy/24 tests                | PASS locally                     |
+| Rust fmt/clippy/26 tests                | PASS locally                     |
 | npm/Cargo dependency vulnerability      | PASS, vulnerability 0            |
 | Git history secret scan                 | PASS, 32 commits, leak 0         |
 | macOS arm64 app build                   | PASS locally and GitHub release  |
