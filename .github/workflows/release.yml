@@ -51,14 +51,16 @@ jobs:
           tagName: v__VERSION__
           releaseName: DirectDrop v__VERSION__
           releaseBody: |
-            ## What's New
-            - Separate Upload and Share List views for predictable navigation
-            - Start a new upload without losing the current active link until new files are chosen
-            - View the active link, every uploaded file, file sizes, total size, downloads and remaining time
-            - Clear Apple Silicon and Intel macOS installer names
-            - Direct WebRTC P2P file transfer with no cloud file storage
-            - Temporary links, QR sharing, download limits, expiration and password protection
-            - Responsive browser receiver and Windows/macOS desktop apps
+            ## 주요 변경 사항 · What's New
+            - Nearby: 같은 Wi-Fi/Ethernet의 DirectDrop 기기를 mDNS로 자동 검색
+            - 6자리 상호 확인 페어링, 인증서 고정 TLS, 장치별 영구 신뢰 관계
+            - 외부 서버를 거치지 않는 다중 파일·폴더 LAN 스트리밍
+            - 수신 전 승인, SHA-256 청크 무결성, bounded backpressure
+            - 일시정지·이어보내기·취소, 연결 복구 후 검증된 offset부터 재개
+            - 전송 속도·ETA·내역·받은 파일, 신뢰 기기와 자동 수신 설정
+            - Share Link의 WebRTC, QR, 만료, 다운로드 제한, 비밀번호 기능 유지
+
+            Nearby discovers DirectDrop devices on the same LAN, pairs them with a mutual six-digit check, and transfers files and folders over certificate-pinned TLS. Transfers never pass through DirectDrop or Cloudflare servers.
 
             ## macOS에서 처음 실행할 때
             이 릴리스는 아직 Apple 공증 전입니다. `Applications` 폴더에 DirectDrop을 복사하고, 릴리스의 `SHA256SUMS.txt`로 파일을 확인한 뒤 터미널에서 아래 명령을 실행하세요.
@@ -69,9 +71,10 @@ jobs:
             ```
 
             ## Known Issues
-            - The macOS app uses ad-hoc signing and is not Apple-notarized yet. Run the commands above if Gatekeeper blocks it.
+            - 요청에 따라 이 릴리스는 Apple Developer ID 서명·공증을 제외했습니다. macOS 앱은 ad-hoc signing 상태이므로 Gatekeeper가 차단하면 위 명령을 사용하세요.
             - The Windows app is unsigned, so SmartScreen may warn.
-            - Some NAT/firewall combinations require an optional TURN server.
+            - Nearby를 처음 켤 때 macOS의 로컬 네트워크 권한 또는 Windows의 Private network 방화벽 허용이 필요할 수 있습니다.
+            - Share Link는 일부 NAT/firewall 조합에서 선택적 TURN 서버가 필요할 수 있습니다.
 
             ## Downloads
             - Apple Silicon Mac (M1/M2/M3/M4/M5): `macOS-Apple-Silicon-arm64.dmg`

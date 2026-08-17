@@ -1,114 +1,112 @@
 # Nearby LAN Share
 
-## 현재 상태
+## v0.2.0 구현 상태
 
-LAN Share는 단계적으로 구현합니다. 현재 완료된 범위는 **Nearby Phase 1**입니다.
+Nearby는 같은 IPv4 사설/링크 로컬 네트워크의 DirectDrop 데스크톱 앱끼리 인터넷과 외부 서버 없이 파일을 전송합니다.
 
-| 영역                                       | 상태   |
-| ------------------------------------------ | ------ |
-| `DirectDrop` / `LAN Share` 최상위 카테고리 | 완료   |
-| 카테고리별 독립 파일 큐와 drag-and-drop    | 완료   |
-| 공통 transfer 상태·transport 계약          | 완료   |
-| mDNS/DNS-SD 기기 탐색                      | 미구현 |
-| 기기 pairing과 identity                    | 미구현 |
-| 암호화 LAN 연결과 파일 전송                | 미구현 |
-| Pause·Resume·폴더 전송                     | 미구현 |
-| Browser LAN Share·Clipboard                | 미구현 |
+| 영역                                              | 상태                            |
+| ------------------------------------------------- | ------------------------------- |
+| 독립 Nearby 화면·파일 큐                          | 완료                            |
+| `_directdrop._tcp.local` mDNS advertise/discovery | 완료                            |
+| 영구 random device ID와 사용자 지정 이름          | 완료                            |
+| 인증서 고정 TLS와 6자리 상호 페어링               | 완료                            |
+| 신뢰 기기·기기별 자동 수신                        | 완료, 기본 OFF                  |
+| 수동 수신 승인                                    | 완료, 기본값                    |
+| 다중 파일·폴더·빈 파일                            | 완료                            |
+| bounded streaming·backpressure·SHA-256            | 완료                            |
+| 보내기 일시정지·재개·취소                         | 완료                            |
+| 연결 중단 후 검증된 offset부터 이어보내기         | 완료                            |
+| 속도·ETA·전송 내역·받은 파일                      | 완료                            |
+| Browser LAN Share·Clipboard sync                  | v0.2.0 범위 밖, listener 미실행 |
 
-Phase 1에서는 mDNS advertise/discovery, LAN listener, 로컬 웹 서버, clipboard watcher를 실행하지 않습니다.
-
-## 목표 데이터 경로
-
-```text
-Sender Desktop ═════ Encrypted local network ═════▶ Receiver Desktop
-```
-
-LAN Share 파일 데이터와 discovery는 Cloudflare, `share.dlfkd.dev`, GitHub, 외부 API 또는 외부 signaling 서버를 사용하지 않습니다. 공유기에 WAN 연결이 없어도 같은 LAN 안에서 동작하는 구조를 목표로 합니다.
-
-## 모듈 경계
+## 데이터 경로
 
 ```text
-Desktop React UI
-├── DirectDrop category
-│   └── WebRTC Share Link
-└── LAN Share category
-    └── Rust Nearby backend (Phase 2+)
-
-Transfer UI
-└── TransferTransport
-    ├── WEBRTC
-    ├── LAN
-    └── BROWSER_LAN
+Sender Desktop
+  └─ mDNS discovery: _directdrop._tcp.local
+  └─ certificate fetch + fingerprint check
+  └─ TLS 1.2/1.3 + paired HMAC device authentication
+       ═════ 1 MiB file chunks + SHA-256 + ACK ═════▶ Receiver Desktop
 ```
 
-공통 계약은 `apps/desktop/src/transfer-contract.ts`에 있습니다. 대용량 binary를 Rust → JavaScript → Rust로 왕복시키지 않고, LAN streaming은 Rust backend에서 처리합니다.
+Nearby discovery, 페어링, 승인, 파일 바이트는 Cloudflare, `share.dlfkd.dev`, GitHub, STUN/TURN 또는 외부 signaling 서버를 사용하지 않습니다. 공유기에 WAN 연결이 없어도 같은 LAN에서 동작합니다.
 
 ## Discovery
 
-- `_directdrop._tcp.local` 형태의 mDNS/DNS-SD를 우선 검토합니다.
-- event-driven discovery를 사용하고 지속적인 대역 포트 스캔이나 busy polling을 하지 않습니다.
-- advertise 정보는 random persistent `deviceId`, 사용자가 바꿀 수 있는 `deviceName`, platform, protocol version, port, capabilities로 제한합니다.
-- MAC address, OS username, 파일 목록과 불필요한 시스템 정보는 공개하지 않습니다.
-- VPN, Tailscale, VM, Docker adapter를 무조건 physical LAN으로 취급하지 않습니다.
+- 서비스 타입: `_directdrop._tcp.local.`
+- TXT 최소 정보: random persistent `deviceId`, 사용자 지정 `deviceName`, platform, protocol version, certificate fingerprint, capabilities
+- 공개하지 않는 정보: MAC address, OS 사용자명, 절대 파일 경로, 파일 목록, 페어링 키
+- 지속 포트 스캔이나 busy polling 없이 mDNS event를 처리합니다.
+- 현재 discovery는 non-loopback private/link-local IPv4 주소를 사용합니다. 공인 IP에서 들어오는 연결은 거부합니다.
+- 네트워크가 mDNS, client isolation 또는 peer-to-peer 통신을 차단하면 기기가 나타나지 않습니다.
 
-## Pairing과 identity
+## Identity와 Pairing
 
-- 설치 시 MAC address와 무관한 random local device ID와 device keypair를 생성합니다.
-- 최초 pairing은 양쪽 동일 숫자 확인 또는 QR 방식으로 명시적 승인을 받습니다.
-- 이후 trusted device 여부는 이름이 아니라 public key fingerprint로 검증합니다.
-- 자동 파일 수신, 텍스트 수신, clipboard sync는 각각 별도 옵션이며 모두 기본 OFF입니다.
+- 최초 실행 시 MAC address와 무관한 UUID, self-signed device certificate, private key를 생성합니다.
+- identity는 앱 데이터의 `nearby/identity.json`에 저장하며 Unix에서는 `0600` 권한으로 제한합니다.
+- identity 저장은 임시 파일과 이전 유효본 backup을 사용해 중간 종료 시 손상을 줄입니다.
+- 최초 페어링은 양쪽에서 같은 6자리 코드를 확인하고 양쪽 모두 승인해야 완료됩니다.
+- 코드는 양쪽 nonce, device ID, 실제 server certificate fingerprint를 포함하므로 mDNS fingerprint 바꿔치기/TLS MITM이면 일치하지 않습니다.
+- 이후 연결은 이름이 아니라 pinned certificate fingerprint와 256-bit shared secret HMAC proof로 상호 인증합니다.
+- shared secret과 private key는 WebView 상태/API에 노출하지 않습니다.
+- 신뢰 해제 시 해당 기기의 key를 로컬에서 삭제합니다.
 
-## Encryption과 protocol
+## Transport와 Protocol
 
-- 같은 Wi-Fi에서도 plaintext 전송을 허용하지 않습니다.
-- QUIC TLS 또는 인증된 TLS 기반 TCP transport를 비교한 뒤 native transport를 선택합니다.
-- protocol에는 version과 명확한 크기 제한을 둡니다.
-- 최소 메시지는 `HELLO`, `AUTH_REQUEST`, `AUTH_ACCEPT`, `TRANSFER_OFFER`, `TRANSFER_ACCEPT`, `TRANSFER_REJECT`, `FILE_METADATA`, `CHUNK`, `ACK`, `PAUSE`, `RESUME`, `CANCEL`, `COMPLETE`, `ERROR`입니다.
+- native Rust TCP listener 위에 TLS 1.2/1.3을 사용합니다.
+- protocol version은 `1`, control frame은 최대 1 MiB, chunk는 최대 1 MiB, 한 번에 최대 10,000개 파일입니다.
+- sender는 한 chunk를 전송한 뒤 receiver의 정확한 `fileId`·offset ACK를 확인합니다. 따라서 느린 디스크에서도 메모리/송신 queue가 무제한 증가하지 않습니다.
+- chunk마다 SHA-256을 검증한 뒤에만 디스크에 기록합니다.
+- trusted-device HMAC proof에는 역할 label, 양쪽 nonce/ID/certificate fingerprint를 포함해 반대 방향·다른 세션 replay를 거부합니다.
+- listener는 동시에 최대 16개 연결만 처리합니다.
 
-## Streaming과 Resume
+## 파일·폴더와 Resume
 
-- 파일 전체를 RAM에 적재하지 않고 bounded read/write buffer와 backpressure를 사용합니다.
-- receiver는 `transferId`, `fileId`, 검증된 offset 또는 chunk map을 로컬에 기록합니다.
-- 연결 복구 후 받은 범위 다음부터 이어받고, streaming BLAKE3 또는 SHA-256으로 무결성을 확인합니다.
-- 폴더 상대 경로는 정규화하며 `..`, absolute path, platform prefix를 거부합니다.
-- 동일 이름 파일은 덮어쓰지 않고 안전한 새 이름을 생성합니다.
+- 파일을 전체 RAM에 적재하지 않고 1 MiB buffer로 읽고 씁니다.
+- 폴더 relative path는 `/` 기준으로 보존합니다.
+- absolute path, `..`, Windows drive prefix/colon, backslash, control/bidi 문자, Windows reserved name, trailing dot/space를 거부합니다.
+- symbolic link는 등록 단계에서 거부해 선택한 폴더 밖 파일이 포함되지 않게 합니다.
+- 수신 중 데이터는 `<download>/.directdrop-partial/<transferId>`에만 저장합니다.
+- resume state는 manifest hash와 실제 partial file length를 함께 확인합니다. 다른 manifest로 같은 transfer ID를 재사용할 수 없습니다.
+- 연결이 끊기면 송신자는 동일 transfer ID로 다시 연결하고, 수신자가 확인한 offset 다음부터 이어보냅니다.
+- 완료 전에는 최종 위치로 이동하지 않으며 기존 파일·폴더와 이름이 겹치면 `(1)`, `(2)` suffix를 붙입니다.
+- 취소 시 해당 transfer ID의 partial directory만 삭제합니다. 원본이나 다른 수신 파일은 삭제하지 않습니다.
 
-## Browser LAN Share
+## 승인·Pause·Cancel
 
-- 사용자가 시작할 때만 LAN local HTTP server를 열고 중지 시 즉시 닫습니다.
-- QR에는 LAN 주소와 secure random, 짧은 만료의 session token을 포함합니다.
-- endpoint는 local network라는 이유만으로 무인증 요청을 허용하지 않습니다.
-- 브라우저 capability에 따라 Resume, directory, background transfer, clipboard 지원을 제한합니다.
+- 신뢰 기기라도 기본은 전송마다 수신자가 파일명·개수·총용량을 보고 승인합니다.
+- 설정에서 특정 신뢰 기기에만 자동 수신을 켤 수 있습니다.
+- 송신자가 일시정지하면 다음 chunk를 읽거나 보내지 않고, 재개 시 같은 connection과 offset에서 계속합니다.
+- 수신자가 취소하면 receiver partial만 정리하고 sender에 취소를 전달합니다.
+- 실패한 송신은 UI의 `이어보내기`로 검증된 offset부터 재시도합니다.
 
-## Clipboard와 URL
+## 로컬 저장과 내역
 
-- MVP 순서는 text, URL, image입니다.
-- clipboard 자동 동기화와 URL 자동 실행은 기본 OFF입니다.
-- event에 origin device ID, event ID, hash를 포함해 순환 동기화를 막습니다.
-- clipboard 전체 내용, secret, key는 로그에 기록하지 않습니다.
+- 기본 저장 위치는 사용자 Downloads의 `DirectDrop` 폴더이며 절대 경로만 설정할 수 있습니다.
+- 완료·실패·취소 내역을 최대 200개 로컬 `transfer-history.json`에 저장합니다. Unix 권한은 `0600`입니다.
+- 내역에는 표시용 파일 metadata만 있고 파일 bytes, private key, shared secret은 없습니다.
 
-## Firewall과 background policy
+## OS 권한과 방화벽
 
-Nearby가 OFF이면 다음 항목도 모두 OFF여야 합니다.
+- macOS bundle에는 `NSLocalNetworkUsageDescription`과 `_directdrop._tcp` Bonjour service declaration이 포함됩니다.
+- macOS 첫 실행 시 `로컬 네트워크` 접근을 허용해야 discovery/listener가 동작합니다.
+- Windows Defender Firewall prompt에서는 `Private networks`만 허용하는 것을 권장합니다. 방화벽 전체를 끄지 않습니다.
+- Nearby를 끄면 mDNS advertise/discovery와 TCP listener를 모두 중지합니다.
 
-```text
-mDNS advertise
-mDNS discovery
-LAN listener
-Local Web Server
-Clipboard watcher
-```
+## v0.2.0 검증 범위
 
-Private network를 우선하며 public Wi-Fi에서는 사용자가 명시적으로 활성화하기 전 경고합니다. 방화벽 전체를 끄거나 광범위한 규칙을 생성하지 않고 필요한 listener와 port만 사용합니다.
+- persistent identity/fingerprint 및 TLS loopback handshake
+- pairing code 안정성, HMAC tamper rejection
+- bounded control/chunk frame limit
+- traversal·reserved·bidi relative path rejection
+- corrupted chunk 저장 전 거부
+- partial offset resume와 manifest mismatch 방어
+- 기존 파일/폴더 non-overwrite
+- 4 GiB 초과 sparse file offset native read
+- macOS/Windows GitHub CI에서 Rust fmt, clippy `-D warnings`, 전체 unit test
 
-## 다음 구현 순서
+실제 서로 다른 물리 장치·공유기 조합은 환경별 mDNS/방화벽 정책의 영향을 받으므로 릴리스 후에도 [테스트 매트릭스](test-matrix.md)에 결과를 누적합니다.
 
-1. Phase 2: mDNS discovery와 최소 device card
-2. Phase 3: persistent identity와 pairing
-3. Phase 4: encrypted connectivity와 작은 text message
-4. Phase 5–8: 파일 streaming, backpressure, 진행률·속도·ETA
-5. Phase 9–12: Pause, Cancel, Resume, multi-file, folder
-6. Phase 13–20: trusted devices, Browser LAN Share, clipboard, transfer center, tray, network change
-7. Phase 21–25: security audit, 성능·Resume 테스트, 반응형 검증, 문서, CI와 release
+## 의도적으로 포함하지 않은 기능
 
-각 Phase 후 기존 Share Link의 URL, QR, WebRTC, 다운로드 제한, 만료 동작을 회귀 테스트합니다.
+Browser LAN Share와 clipboard 자동 동기화는 편의를 위해 plaintext HTTP listener나 무인 clipboard 감시를 추가하지 않도록 v0.2.0에서 활성화하지 않았습니다. 이후 버전에서 브라우저가 신뢰할 수 있는 로컬 인증과 별도 opt-in/loop 방지 설계를 갖춘 뒤 추가합니다.

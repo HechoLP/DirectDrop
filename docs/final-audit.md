@@ -1,184 +1,124 @@
-# DirectDrop Final Audit
-
-## 결론
-
-**Release readiness: NOT READY FOR RELEASE**
+# DirectDrop v0.2.0 Final Audit
 
 감사일: 2026-08-17
 
-감사 버전: 0.1.4
+## 결론
 
-감사 기준: `cf6cd3c0805db6e3bbae3cccde24f157313ce6ac`
+**로컬 릴리스 준비 상태: PASS**
 
-보안/안정성 수정: `49ddacb`
+DirectDrop v0.2.0의 Nearby 핵심 경로는 macOS arm64 한 대에서 서로 다른 bundle ID와 별도 앱 데이터 디렉터리를 사용하는 두 앱 인스턴스로 실제 검증했습니다. mDNS 발견, 인증서 고정 TLS, 6자리 상호 확인, 신뢰 저장, 수신 승인, 파일 스트리밍, 양쪽 완료 기록과 SHA-256 원본 일치를 확인했습니다.
 
-CI 공급망 고정: `c7695b6`
-
-코드의 발견된 CRITICAL/HIGH 문제는 수정되고 회귀 테스트가 통과했습니다. 그러나 현재 감사 커밋의 Windows installer와 실제 브라우저별 전송이 검증되지 않았고, macOS artifact가 공증되지 않았으며, Nearby transport 자체가 미구현입니다. 운영 `share.dlfkd.dev`도 아직 0.1.0이어서 local hardening이 배포되지 않았습니다. 따라서 Release Gate를 통과하지 않습니다.
+현재 남은 릴리스 게이트는 GitHub 원격 CI/Windows 빌드, 공개 artifact 생성, 운영 `share.dlfkd.dev` 배포와 배포 후 검증입니다. Apple Developer ID 서명과 공증은 사용자 요청에 따라 이번 릴리스 범위에서 제외합니다.
 
 ## 감사 환경
 
-| 항목 | 실제 확인 범위 |
-| --- | --- |
-| OS | macOS 26.5.2 (25F84), arm64 |
-| Runtime | Node 24.14.1, pnpm 11.19.0, rustc/cargo 1.96.0 |
-| Desktop UI | 1040×760, 최소 창 600×620에서 no overflow 확인 |
-| Browser UI | in-app Chromium browser, 390×844 랜딩/오류/복구 화면 확인 |
-| Windows | 이전 v0.1.4 remote workflow와 asset만 확인; 현재 감사 커밋 실행 안 함 |
-| Safari/Firefox/Edge | 실행 안 함 |
+| 항목           | 확인 범위                                                         |
+| -------------- | ----------------------------------------------------------------- |
+| OS             | macOS arm64                                                       |
+| Desktop        | Tauri 2 release bundle 2개, 별도 identity/history/storage         |
+| Nearby network | 같은 Mac의 loopback을 포함한 실제 OS mDNS browse와 native TCP/TLS |
+| Browser/server | workspace production build와 자동 테스트                          |
+| Windows        | GitHub Windows runner에서 확인 예정                               |
+| 물리 장치      | 서로 다른 물리 Mac/Windows 조합은 별도 후속 matrix 필요           |
 
 ## 자동 검증 결과
 
-| 검증 | 결과 | 증거 |
-| --- | --- | --- |
-| `pnpm check` | PASS | lint, strict typecheck, 58 tests, desktop/web/server production build |
-| Rust fmt/clippy | PASS | all targets/features, warnings denied |
-| Rust tests | PASS | 4 tests, 포함: source 보존, path/public ID 경계, 정확한 range, 4 GiB 초과 offset |
-| `pnpm audit --prod --audit-level high` | PASS | known vulnerability 0 |
-| `cargo audit` vulnerability | PASS | vulnerability 0 |
-| `cargo audit` warning | WARNING | target-conditional GTK 계열 17건; 세 release target tree에는 `glib` 없음 |
-| secret scan | PASS | 현재 tree와 Git history에서 private key/token 발견 안 됨; `.env.example` 값은 빈 값 |
-| workflow YAML | PASS | YAML parse, external Actions full SHA pinning |
+| 검증                                        | 결과               | 증거                                                                  |
+| ------------------------------------------- | ------------------ | --------------------------------------------------------------------- |
+| `pnpm check`                                | PASS               | lint, strict typecheck, 59 tests, desktop/web/server production build |
+| `cargo fmt --check`                         | PASS               | Rust formatting                                                       |
+| `cargo clippy --all-targets -- -D warnings` | PASS               | 모든 target, warning denied                                           |
+| `cargo test --all-targets`                  | PASS               | 21 tests                                                              |
+| `pnpm audit --prod --audit-level high`      | PASS               | 알려진 vulnerability 0                                                |
+| `cargo audit`                               | PASS with warnings | vulnerability 0, 전이 의존성 유지보수/unsound warning 17건            |
 
-테스트 실패나 skip, strict 완화, warning 무시 설정은 추가하지 않았습니다.
+`cargo audit` 경고는 Tauri의 Linux GTK3 계열 전이 의존성과 `proc-macro-error`, `unic-*`, `glib`에 관한 것입니다. 현재 audit은 취약점으로 분류하지 않았으며, upstream Tauri/WebKitGTK 의존성 갱신과 함께 계속 추적합니다.
 
-## Final Test Matrix
+## 실제 Nearby E2E
 
-`PASS`는 적힌 범위의 자동 또는 실제 검증만 뜻합니다. protocol fixture PASS를 실제 두 장치 전송 PASS로 확장 해석하지 않습니다.
+| 단계                                 | 결과                                                                      |
+| ------------------------------------ | ------------------------------------------------------------------------- |
+| 별도 identity·certificate 생성       | PASS                                                                      |
+| `_directdrop._tcp.local` 광고와 발견 | PASS                                                                      |
+| 6자리 pairing code 양쪽 일치         | PASS                                                                      |
+| pinned TLS와 paired HMAC 인증        | PASS                                                                      |
+| 수신자 파일 제안 표시·수동 승인      | PASS                                                                      |
+| `README.md` 5,835 bytes 전송         | PASS                                                                      |
+| 송신/수신 history `COMPLETED`        | PASS                                                                      |
+| 원본/수신 SHA-256 일치               | PASS (`c961d78751ce1a82988ad7bab0fbd76deaf9050874cd932cf2532c7975b2601d`) |
+| 테스트 trust/data/history 정리       | PASS                                                                      |
 
-### Nearby
+이 검증 중 동기 Tauri command에서 `tokio::spawn`을 호출해 main thread가 panic하던 실제 결함을 발견했습니다. outbound task를 `tauri::async_runtime::spawn`으로 실행하도록 수정하고 동일 E2E를 다시 통과했습니다.
 
-| 조합 | 결과 | 이유 |
-| --- | --- | --- |
-| Windows → Windows | NOT IMPLEMENTED / NOT TESTED | mDNS, pairing, identity, LAN transport 미구현 |
-| Windows → macOS | NOT IMPLEMENTED / NOT TESTED | 동일 |
-| macOS → Windows | NOT IMPLEMENTED / NOT TESTED | 동일 |
-| macOS → macOS | NOT IMPLEMENTED / NOT TESTED | 동일 |
+## Nearby 기능 감사
 
-### Share Link
-
-| 조합 | 결과 | 확인한 범위 |
-| --- | --- | --- |
-| Desktop → Chrome | NOT TESTED | 운영 HTTPS/API/WSS만 확인; 실제 payload 저장 미실행 |
-| Desktop → Edge | NOT TESTED | 미실행 |
-| Desktop → Safari | NOT TESTED | 미실행 |
-| Desktop → Firefox | NOT TESTED | 미실행 |
-| Protocol/API/signaling 자동 검증 | PASS | authorization, completion, timeout, malformed message, integrity |
-
-### 파일
-
-| 시나리오 | 결과 | 확인한 범위 |
-| --- | --- | --- |
-| 0 B | PASS | ordered manifest/file terminal validator |
-| 1 KB | NOT TESTED | 실제 전송 미실행 |
-| 100 MB | NOT TESTED | 실제 전송 미실행 |
-| 1 GB | NOT TESTED | 실제 전송 미실행 |
-| >4 GiB | PARTIAL PASS | sparse file의 마지막 byte native range read; 전체 전송 미실행 |
-| 100 GiB | NOT TESTED | 실제 전송 미실행 |
-| 폴더 | NOT IMPLEMENTED | 현 버전은 파일만 지원 |
-| 다중 파일 | PASS | manifest 순서·총량·0 B 혼합 validator; 실제 저장은 미실행 |
-| 손상 chunk | PASS | 저장 전 SHA-256 mismatch 거부 |
-| 중복/순서 오류 | PASS | duplicate manifest, missing chunk, offset/metadata mismatch 거부 |
-
-### 상태
-
-| 상태 | 결과 | 확인한 범위 |
-| --- | --- | --- |
-| Complete | PASS | sender/receiver 이중 확인, 정확히 1회 count |
-| Cancel | NOT TESTED | cancellation code path 검토; 실제 UI race 미실행 |
-| Pause | NOT IMPLEMENTED | 상태·전송 protocol 미구현 |
-| Resume | NOT IMPLEMENTED | offset persistence·검증 미구현 |
-| Disconnect | PASS | receiver disconnect slot 반환, DataChannel early-close abort 구현 |
-| Timeout | PASS | pending 및 transferring inactivity watchdog |
-| Sender close | NOT TESTED | 코드 cleanup 검토만 수행 |
-| Receiver close | PASS | signaling disconnect 회귀 테스트 |
-| Double click | PARTIAL PASS | receiver request-in-flight guard 정적 검토; 실제 UI 자동화 미실행 |
+| 기능                     | 결과 | 범위                                                            |
+| ------------------------ | ---- | --------------------------------------------------------------- |
+| Persistent identity      | PASS | UUID, self-signed cert/key, Unix `0600`, atomic backup          |
+| Device discovery         | PASS | mDNS browse/advertise, bounded TXT metadata, local address 제한 |
+| Secure pairing           | PASS | 6자리 code, certificate pin, HMAC proof, trust revoke           |
+| File/folder queue        | PASS | 다중 파일, 폴더, 빈 파일, symlink 거부                          |
+| Streaming integrity      | PASS | 1 MiB bounded chunks, chunk SHA-256, exact offset ACK           |
+| Pause/resume/cancel      | PASS | protocol/state/unit tests; physical interruption soak는 후속    |
+| Retry/resume persistence | PASS | manifest hash, partial offset, 최대 3회 재시도                  |
+| Receive safety           | PASS | 수동 승인 기본, partial 격리, non-overwrite 이동                |
+| History/settings         | PASS | 송수신 내역, 받은 파일, 저장 위치, trust 관리                   |
 
 ## 보안 결과
 
-상세 Threat Model과 finding은 [security-audit.md](security-audit.md)에 있습니다.
+| 심각도   | 남은 수 |
+| -------- | ------: |
+| CRITICAL |       0 |
+| HIGH     |       0 |
+| MEDIUM   |       6 |
+| LOW      |       2 |
 
-| 심각도 | 남은 수 |
-| --- | ---: |
-| CRITICAL | 0 |
-| HIGH | 0 |
-| MEDIUM | 6 |
-| LOW | 2 |
+상세 threat model은 [security-audit.md](security-audit.md)에 기록했습니다. 주요 남은 위험은 미서명 installer 경고, 서로 다른 물리 OS/공유기 조합의 제한된 실측, public Wi-Fi 오인 가능성, 의도적으로 비활성화한 Browser LAN/clipboard 기능입니다.
 
-주요 수정은 chunk SHA-256/protocol version, 저장 ACK backpressure, 이중 완료 확인, 예약·전송 watchdog, strict bounded schema, WebSocket Origin allowlist, 비덮어쓰기 저장, hostile filename 정제, API response validation, third-party Action SHA pinning입니다.
-
-## 성능과 자원
-
-로컬 release server의 짧은 관찰 결과입니다. 장기 soak test는 아닙니다.
-
-| 상태 | CPU | RSS | FD / TCP |
-| --- | ---: | ---: | ---: |
-| idle | 0.0% | 약 92–94 MB | 23 / 2 |
-| idle WebSocket 25개 | 0.0% | 약 92.6 MB | 48 / 27 |
-| 25개 종료 후 | 0.0% | 약 92.6 MB | 23 / 2 |
-
-100개 동시 WebSocket 시도는 동일 IP connection rate limit의 HTTP 429에 도달했습니다. 관찰 구간에 busy-loop나 socket/FD 잔류는 없었습니다. 실제 대용량 전송 RSS, 느린 디스크, disk full, suspend/resume, 장시간 reconnect soak는 실행하지 않았습니다.
-
-## 패키지와 배포
+## 패키지와 배포 정책
 
 ### macOS
 
-- `DirectDrop.app`과 `DirectDrop_0.1.4_aarch64.dmg` build: PASS
-- binary: Mach-O arm64
-- `codesign --verify --deep --strict`: PASS
-- `hdiutil verify`: PASS
-- DMG SHA-256: `b59ddb207e47f6c5429d5e2ca80cd38eca5fb398fc8e1634e10e7f6a32a4b4be`
-- signing identity: ad-hoc, TeamIdentifier 없음
-- notarization: 없음
-- `spctl --assess`: **FAIL (rejected)**
+- Apple Silicon과 Intel DMG를 GitHub Actions에서 각각 생성합니다.
+- Developer ID signing/notarization은 이번 범위에서 제외합니다.
+- 사용자는 Gatekeeper가 차단할 때 아래 명령으로 quarantine을 제거한 뒤 실행할 수 있습니다.
 
-`xattr -dr com.apple.quarantine`는 테스트용 우회 안내일 뿐 정식 installer acceptance PASS로 취급하지 않습니다.
+```bash
+xattr -dr com.apple.quarantine /Applications/DirectDrop.app
+open /Applications/DirectDrop.app
+```
 
-### Windows와 GitHub
+### Windows
 
-- 현재 감사 커밋 Windows build/설치/제거/upgrade: NOT TESTED
-- 이전 v0.1.4 release workflow run `31959215041`: PASS
-- 이전 remote CI run `31960423968`: PASS, 단 현재 local 감사 커밋을 포함하지 않음
-- 기존 v0.1.4의 Apple Silicon DMG, Intel DMG, EXE, MSI는 공개 `SHA256SUMS.txt`와 모두 일치
-- local audit commit은 push/deploy하지 않았으므로 새 remote CI 결과가 없음
+- Windows x64 NSIS EXE와 MSI를 GitHub Actions에서 생성합니다.
+- Windows code signing이 없으므로 SmartScreen 경고가 표시될 수 있습니다.
 
-### Production
+### Artifact 무결성
 
-2026-08-17 관찰 시점:
+- 릴리스 workflow가 모든 공개 installer의 `SHA256SUMS.txt`를 생성합니다.
+- GitHub Actions와 공개 checksum을 배포 후 다시 확인합니다.
 
-- `https://share.dlfkd.dev/health`: HTTP 정상, `version: 0.1.0`, `fileStorage: false`
-- public verify: HTTPS, API, WSS, register, presence PASS
-- TURN: 미구성
-- arbitrary Origin WebSocket: 운영에서는 연결됨
-- CSP, X-Content-Type-Options, frame/referrer/permissions/noindex response header: 운영 응답에 없음
-- local 0.1.4 code에는 위 Origin/header 수정이 있으나 아직 배포되지 않음
-- Cloudflare dashboard/tunnel credential rotation·restart: 권한이 없어 NOT TESTED
+## 남은 검증 범위
 
-## 알려진 제한과 Release Gate
+- 서로 다른 두 물리 장치의 macOS/Windows 교차 전송
+- 1 GiB 이상, 느린 디스크, sleep/wake, 장시간 재연결 soak
+- Windows 설치·제거와 SmartScreen 실제 화면
+- Chrome/Edge/Safari/Firefox Share Link 실제 대용량 저장
+- GitHub 공개 release asset과 production deploy 후 보안 header/Origin 정책
 
-- Nearby는 UI/파일 큐 Phase 1뿐이며 discovery, pairing, identity, 암호화 transport가 없습니다.
-- Pause, Resume, folder, clipboard, Browser LAN Share, persistent history는 미구현입니다.
-- File System Access API가 없는 브라우저는 최대 512 MiB 메모리 fallback만 지원합니다.
-- restrictive NAT를 위한 TURN이 운영에 없습니다.
-- 현재 Windows/cross-browser/대용량 실제 E2E 증거가 없습니다.
-- macOS Developer ID signing/notarization이 없습니다.
-- 운영 서버는 감사 수정 전 버전입니다.
+이 항목들은 구현 누락을 뜻하지 않으며, 현재 로컬 검증을 넘어서는 release/physical evidence입니다.
 
-Release 전에 최소한 현재 commit의 remote CI/Windows installer, Apple signing/notarization, Chrome·Edge·Safari·Firefox 실제 전송, 0 B/1 KB/100 MB/1 GB 및 느린 수신·disconnect 검증, 운영 배포 후 Origin/security header 재검증이 필요합니다. Nearby를 릴리스 기능으로 표기하려면 구현 후 pairing/MITM/replay/LAN matrix를 별도 통과해야 합니다.
+## Release Gate
 
-## 최종 Gate
+| Gate                              | 상태                     |
+| --------------------------------- | ------------------------ |
+| CRITICAL/HIGH = 0                 | PASS                     |
+| Workspace/Rust 자동 검증          | PASS                     |
+| 실제 Nearby mDNS→TLS→전송→hash    | PASS                     |
+| macOS arm64 local release app     | PASS                     |
+| 현재 commit GitHub CI             | PUSH 후 확인             |
+| Intel macOS/Windows artifact      | Release workflow 후 확인 |
+| 운영 `share.dlfkd.dev` v0.2.0     | 배포 후 확인             |
+| Developer ID signing/notarization | 사용자 요청에 따라 제외  |
 
-| Gate | 결과 |
-| --- | --- |
-| CRITICAL = 0 | PASS |
-| HIGH = 0 | PASS |
-| 자동 회귀 테스트 | PASS |
-| local build | PASS |
-| 현재 commit remote CI | FAIL / NOT RUN |
-| core cross-platform integration | FAIL / NOT TESTED |
-| Windows installer | FAIL / NOT TESTED |
-| macOS installer acceptance | FAIL |
-| Nearby | FAIL / NOT IMPLEMENTED |
-| 운영 hardening 배포 | FAIL / NOT DEPLOYED |
-
-**최종 판정: NOT READY FOR RELEASE**
+**판정: 코드와 로컬 Nearby 핵심 경로는 릴리스 준비 완료. 원격 CI·artifact·운영 배포 검증을 이어서 수행한다.**

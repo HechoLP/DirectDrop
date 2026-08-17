@@ -14,7 +14,7 @@ Creates a temporary `share.dlfkd.dev` link and QR code. The recipient saves file
 
 ### LAN Share · Nearby
 
-Designed for direct transfers between devices on the same Wi-Fi or Ethernet network without internet access. Phase 1 currently separates the screen, file queue, and shared transport contract. mDNS discovery and actual LAN transfers are planned for the next phases. See the [Nearby LAN Share document](docs/nearby.md) for the exact status.
+Discovers DirectDrop devices on the same Wi-Fi or Ethernet network with mDNS and transfers without internet access. First-time pairing requires both users to compare a six-digit code. Later connections authenticate the device with its pinned certificate fingerprint and persistent trust key. File and folder bytes only travel through the authenticated TLS connection. See [Nearby LAN Share](docs/nearby.md) for protocol and security details.
 
 ## Features
 
@@ -26,6 +26,11 @@ Designed for direct transfers between devices on the same Wi-Fi or Ethernet netw
 - Multiple files, 256 KiB chunk streaming, and DataChannel backpressure
 - Windows and macOS desktop apps with a mobile-first browser receiver
 - SQLite server metadata and a sender-only local path registry
+- Nearby discovery over `_directdrop._tcp.local` mDNS
+- Mutual six-digit pairing and certificate-pinned TLS 1.2/1.3
+- Bounded 1 MiB streaming for multiple files and folders with chunk SHA-256
+- Receive approval, pause, resume, cancel, and verified offset recovery
+- Nearby speed, ETA, persistent history, received files, and trusted devices
 
 ## Download
 
@@ -45,18 +50,22 @@ open /Applications/DirectDrop.app
 ```text
 Sender Desktop ── signaling ──▶ share.dlfkd.dev ◀── signaling ── Receiver Browser
 Sender Desktop ═══════════════ WebRTC file data ═══════════════▶ Receiver Browser
+
+Nearby Desktop ═══ certificate-pinned TLS on local network ═══▶ Nearby Desktop
 ```
 
-Cloudflare Tunnel carries the landing page, API, and WebSocket signaling only. File bytes do not pass through the tunnel or the DirectDrop server.
+Cloudflare Tunnel carries the Share Link landing page, API, and WebSocket signaling only. Share Link bytes move over WebRTC and Nearby bytes move over local TLS; neither path sends file bytes through the DirectDrop server.
 
 ## Requirements and limitations
 
-- The current public release transfers files through DirectDrop Share Link. LAN Share is still under development.
 - The sender's DirectDrop app must stay online while files are being shared.
+- Nearby requires DirectDrop v0.2.0 or later on both devices and the same private/link-local IPv4 network.
+- Allow Local Network access on macOS. On Windows, allow DirectDrop only on `Private networks` when the firewall prompt appears.
+- VPNs, guest Wi-Fi, or AP isolation may block device-to-device traffic or mDNS discovery.
 - The default configuration uses STUN for direct P2P connections. Some NAT or firewall environments may prevent a connection.
 - TURN is optional and is used only when it is explicitly configured and relay is enabled for the share. There is no server-upload fallback.
 - Large-file streaming works best in current Chrome or Edge with the File System Access API. See [browser support](docs/browser-support.md) for details.
-- Current builds are not code-signed or notarized.
+- Windows builds are unsigned. At the user's request, macOS Developer ID signing and notarization are excluded; macOS artifacts use ad-hoc signing.
 
 ## Local development
 

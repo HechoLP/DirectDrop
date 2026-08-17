@@ -2,28 +2,46 @@
 
 모든 주요 변경 사항은 이 파일에 기록합니다. 버전은 Semantic Versioning을 따릅니다.
 
-## Unreleased
+## 0.2.0 - 2026-08-17
 
 ### Added
 
 - `DirectDrop` Share Link와 `LAN Share` Nearby를 분리한 최상위 제품 카테고리
 - 두 카테고리에서 독립적으로 유지되는 파일 선택 큐와 drag-and-drop 동작
-- LAN Share Phase 1 화면과 WebRTC/LAN/Browser LAN 공통 전송 계약
-- Nearby 단계별 아키텍처·보안·백그라운드 정책 문서
+- `_directdrop._tcp.local` mDNS 기반 실제 Nearby 기기 검색과 native TCP listener
+- persistent random device identity, self-signed certificate와 6자리 상호 확인 페어링
+- 인증서 고정 TLS 1.2/1.3와 paired device HMAC 상호 인증
+- 여러 파일·폴더·빈 파일의 1 MiB bounded native streaming
+- 수신 전 승인, 기기별 자동 수신 opt-in, 신뢰 기기 해제
+- chunk SHA-256, exact offset ACK, 연결 중단 후 partial offset resume
+- 보내기 일시정지·재개·취소·이어보내기와 속도·ETA 표시
+- Nearby 전송 내역·받은 파일·저장 경로·기기 이름 설정
+- macOS Local Network/Bonjour usage declaration
+- Nearby 아키텍처·보안·OS 권한·테스트 매트릭스 문서
 
 ### Security
 
-- LAN discovery, listener, 수신 포트는 실제 transport 구현 전까지 비활성 상태 유지
+- private/link-local address만 허용하고 공인 IP 연결 거부
+- protocol/control/chunk/file/path 크기 제한, 16 concurrent connection과 IP rate limit
+- traversal·drive·backslash·control/bidi·Windows reserved path 및 symbolic link 거부
+- identity/private key/shared secret을 WebView에 노출하지 않고 Unix `0600`으로 저장
+- resume manifest hash 검증, scoped partial cleanup, destination non-overwrite
+- Browser LAN HTTP listener와 clipboard watcher는 안전한 opt-in 설계 전까지 비활성 유지
 
 ### Changed
 
 - 공유 목록을 링크·파일 수·다운로드 수·남은 시간만 표시하는 요약 행으로 단순화
 - 공유 항목을 클릭하면 QR, 전체 파일과 전송 현황이 있는 상세 화면으로 이동하도록 분리
+- 웹사이트에 Nearby와 Share Link의 두 직접 전송 경로, OS별 다운로드·권한 안내 추가
+- macOS Developer ID 서명·공증은 사용자 요청에 따라 제외하고 ad-hoc signing 유지
 
 ### Fixed
 
 - 일반적인 다중 파일 다운로드에서 Chrome의 보호 폴더 선택창을 열지 않고 브라우저 기본 다운로드 방식으로 저장
 - 대용량 저장 위치가 보호 폴더로 거부될 때 새 전용 하위 폴더를 안내하는 복구 메시지 추가
+- 현재 공유/전송 중 종료 경고에 Nearby active transfer 포함
+- 동기 Tauri command에서 Nearby outbound task를 시작할 때 Tokio reactor가 없어 앱이 종료되던 문제 수정
+- Nearby 기기별 보내기 버튼에 고유 접근성 이름을 추가해 보조 기술에서 대상 기기를 정확히 구분
 
 ## 0.1.4 - 2026-08-17
 

@@ -14,7 +14,7 @@ DirectDrop은 클라우드에 파일을 올리지 않고 기기에서 기기로 
 
 ### LAN Share · Nearby
 
-같은 Wi-Fi 또는 Ethernet의 기기로 인터넷 없이 직접 전송하기 위한 모드입니다. 현재 Phase 1에서 독립 화면·파일 큐·공통 전송 계약까지 분리했으며, mDNS 기기 탐색과 실제 LAN 전송은 다음 Phase에서 구현합니다. 자세한 범위는 [Nearby LAN Share 문서](docs/nearby.md)를 참고하세요.
+같은 Wi-Fi 또는 Ethernet의 DirectDrop 기기를 mDNS로 찾고 인터넷 없이 직접 전송합니다. 최초 연결은 양쪽의 6자리 코드를 확인하며, 이후에는 인증서 fingerprint와 영구 신뢰 키로 기기를 인증합니다. 파일·폴더 데이터는 인증서 고정 TLS 연결로만 이동합니다. 자세한 프로토콜과 보안 경계는 [Nearby LAN Share 문서](docs/nearby.md)를 참고하세요.
 
 ## 핵심 기능
 
@@ -26,6 +26,11 @@ DirectDrop은 클라우드에 파일을 올리지 않고 기기에서 기기로 
 - 여러 파일과 256 KiB 청크 스트리밍, DataChannel backpressure
 - Windows 및 macOS 데스크톱 앱, 모바일 우선 브라우저 수신 화면
 - SQLite 기반 서버 메타데이터와 송신자 전용 로컬 경로 레지스트리
+- `_directdrop._tcp.local` mDNS 기반 Nearby 기기 검색
+- 6자리 상호 확인 페어링과 인증서 고정 TLS 1.2/1.3 연결
+- 여러 파일·폴더의 1 MiB bounded 스트리밍과 청크 SHA-256 검증
+- 수신 승인, 일시정지·이어보내기·취소, 연결 중단 후 offset 재개
+- Nearby 속도·ETA·전송 내역·받은 파일과 신뢰 기기 관리
 
 ## 다운로드
 
@@ -45,18 +50,22 @@ open /Applications/DirectDrop.app
 ```text
 Sender Desktop ── signaling ──▶ share.dlfkd.dev ◀── signaling ── Receiver Browser
 Sender Desktop ═══════════════ WebRTC file data ═══════════════▶ Receiver Browser
+
+Nearby Desktop ═══ certificate-pinned TLS on local network ═══▶ Nearby Desktop
 ```
 
-Cloudflare Tunnel은 랜딩 페이지, API, WebSocket signaling만 전달합니다. 실제 파일 바이트는 Tunnel이나 DirectDrop 서버를 통과하지 않습니다.
+Cloudflare Tunnel은 Share Link의 랜딩 페이지, API, WebSocket signaling만 전달합니다. Share Link 파일 바이트는 WebRTC로, Nearby 파일 바이트는 로컬 네트워크 TLS로 이동하며 둘 다 DirectDrop 서버를 통과하지 않습니다.
 
 ## 요구 사항과 제한
 
-- 현재 공개 릴리스의 실제 파일 전송 기능은 DirectDrop Share Link입니다. LAN Share는 개발 중입니다.
 - 송신자의 DirectDrop 앱이 온라인이어야 합니다.
+- Nearby는 양쪽에 DirectDrop v0.2.0 이상이 설치되어 있고 같은 IPv4 사설/링크 로컬 네트워크에 있어야 합니다.
+- macOS에서는 로컬 네트워크 접근을 허용하고, Windows 방화벽에서는 DirectDrop을 `Private network`에만 허용하세요.
+- VPN·게스트 Wi-Fi·AP isolation이 기기 간 통신이나 mDNS를 차단하면 Nearby 검색이 되지 않을 수 있습니다.
 - 기본 구성은 STUN을 사용하는 Direct P2P 전용입니다. 일부 NAT·방화벽 환경에서는 연결이 실패할 수 있습니다.
 - TURN은 선택 사항이며 명시적으로 설정하고 공유에서 Relay를 허용한 경우에만 사용합니다. 서버 업로드 fallback은 없습니다.
 - 대용량 디스크 스트리밍 저장은 File System Access API가 있는 최신 Chrome/Edge에서 가장 잘 동작합니다. 자세한 내용은 [브라우저 지원 문서](docs/browser-support.md)를 참고하세요.
-- 현재 빌드는 서명·공증되지 않았습니다.
+- 현재 Windows 빌드는 코드 서명되지 않았습니다. 요청에 따라 macOS Developer ID 서명·공증은 제외하고 ad-hoc signing으로 배포합니다.
 
 ## 로컬 개발
 
