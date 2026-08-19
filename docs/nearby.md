@@ -10,7 +10,7 @@ Nearby는 같은 IPv4 사설/링크 로컬 네트워크의 DirectDrop 데스크�
 | `_directdrop._tcp.local` mDNS advertise/discovery | 완료                            |
 | 영구 random device ID와 사용자 지정 이름          | 완료                            |
 | 인증서 고정 TLS와 6자리 상호 페어링               | 완료                            |
-| 신뢰 기기·기기별 자동 수신                        | 완료, 기본 OFF                  |
+| 신뢰 기기·저위험 파일 자동 수신                   | 완료, 기본 OFF                  |
 | 수동 수신 승인                                    | 완료, 기본값                    |
 | 다중 파일·폴더·빈 파일                            | 완료                            |
 | bounded streaming·backpressure·SHA-256            | 완료                            |
@@ -54,7 +54,7 @@ Nearby discovery, 페어링, 승인, 파일 바이트는 Cloudflare, `share.dlfk
 ## Transport와 Protocol
 
 - native Rust TCP listener 위에 TLS 1.2/1.3을 사용합니다.
-- protocol version은 `1`, control frame은 최대 1 MiB, chunk는 최대 1 MiB, 한 번에 최대 10,000개 파일입니다.
+- protocol version은 `2`, control frame은 최대 1 MiB, chunk는 최대 4 MiB, 한 번에 최대 10,000개 파일입니다.
 - sender는 한 chunk를 전송한 뒤 receiver의 정확한 `fileId`·offset ACK를 확인합니다. 따라서 느린 디스크에서도 메모리/송신 queue가 무제한 증가하지 않습니다.
 - chunk마다 SHA-256을 검증한 뒤에만 디스크에 기록합니다.
 - trusted-device HMAC proof에는 역할 label, 양쪽 nonce/ID/certificate fingerprint를 포함해 반대 방향·다른 세션 replay를 거부합니다.
@@ -70,12 +70,14 @@ Nearby discovery, 페어링, 승인, 파일 바이트는 Cloudflare, `share.dlfk
 - resume state는 manifest hash와 실제 partial file length를 함께 확인합니다. 다른 manifest로 같은 transfer ID를 재사용할 수 없습니다.
 - 연결이 끊기면 송신자는 동일 transfer ID로 다시 연결하고, 수신자가 확인한 offset 다음부터 이어보냅니다.
 - 완료 전에는 최종 위치로 이동하지 않으며 기존 파일·폴더와 이름이 겹치면 `(1)`, `(2)` suffix를 붙입니다.
+- 실행 가능·script·macro·archive 형식은 자동 수신하지 않으며, 전체 수신 후 실제 실행 header가 표시 형식과 다르면 최종 이동 전에 다시 승인받습니다.
+- macOS quarantine 또는 Windows Mark-of-the-Web 적용에 실패하면 파일을 최종 위치로 이동하지 않습니다.
 - 취소 시 해당 transfer ID의 partial directory만 삭제합니다. 원본이나 다른 수신 파일은 삭제하지 않습니다.
 
 ## 승인·Pause·Cancel
 
 - 신뢰 기기라도 기본은 전송마다 수신자가 파일명·개수·총용량을 보고 승인합니다.
-- 설정에서 특정 신뢰 기기에만 자동 수신을 켤 수 있습니다.
+- 설정에서 특정 신뢰 기기의 저위험 파일만 자동 수신하도록 켤 수 있습니다. 실행 가능 파일과 내부를 확인할 수 없는 container는 항상 승인합니다.
 - 송신자가 일시정지하면 다음 chunk를 읽거나 보내지 않고, 재개 시 같은 connection과 offset에서 계속합니다.
 - 수신자가 취소하면 receiver partial만 정리하고 sender에 취소를 전달합니다.
 - 실패한 송신은 UI의 `이어보내기`로 검증된 offset부터 재시도합니다.

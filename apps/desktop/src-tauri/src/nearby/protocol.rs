@@ -3,7 +3,7 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 use super::NearbyError;
 
-pub const LAN_PROTOCOL_VERSION: u16 = 1;
+pub const LAN_PROTOCOL_VERSION: u16 = 2;
 pub const CERTIFICATE_REQUEST_MAGIC: &[u8; 8] = b"DDCERT1\n";
 pub const MAX_CONTROL_FRAME_BYTES: usize = 1024 * 1024;
 pub const MAX_CHUNK_BYTES: usize = 4 * 1024 * 1024;

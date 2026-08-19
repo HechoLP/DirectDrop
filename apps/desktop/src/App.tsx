@@ -51,6 +51,7 @@ import {
   type PublicFile,
 } from "@directdrop/protocol";
 import {
+  fileSecurityReasonLabels,
   formatBytes,
   formatDuration,
   type ProgressSnapshot,
@@ -468,8 +469,12 @@ export function App() {
     void listen<NearbyTransferOffer>("nearby-transfer-offer", (event) => {
       setNearbyOffer(event.payload);
       notifyIfEnabled(
-        "Nearby 파일 수신 요청",
-        `${event.payload.deviceName} 기기에서 ${event.payload.files.length}개 파일을 보내려고 합니다.`,
+        event.payload.confirmationStage === "AFTER_INSPECTION"
+          ? "Nearby 파일 재확인 필요"
+          : "Nearby 파일 수신 요청",
+        event.payload.confirmationStage === "AFTER_INSPECTION"
+          ? "파일 내용과 표시 형식이 달라 저장 전 확인이 필요합니다."
+          : `${event.payload.deviceName} 기기에서 ${event.payload.files.length}개 파일을 보내려고 합니다.`,
       );
     }).then((unlisten) => {
       if (disposed) unlisten();
@@ -2567,7 +2572,7 @@ function NearbySettings({
                   <small>{device.deviceId.slice(0, 12)}</small>
                 </span>
                 <span className="dd-trusted-device-actions">
-                  <label title="이 기기의 파일을 확인 없이 자동 수신">
+                  <label title="실행파일·스크립트·압축파일 등은 자동 수신하지 않고 항상 확인합니다">
                     <input
                       type="checkbox"
                       checked={device.autoAcceptFiles}
@@ -2575,7 +2580,7 @@ function NearbySettings({
                         void onAutoAccept(device.deviceId, event.target.checked)
                       }
                     />
-                    자동 수신
+                    저위험 파일 자동 수신
                   </label>
                   <button
                     type="button"
@@ -2691,6 +2696,9 @@ function NearbyReceiveDialog({
   offer: NearbyTransferOffer;
   onDecision: (accepted: boolean) => void;
 }) {
+  const [securityConfirmed, setSecurityConfirmed] = useState(false);
+  const needsConfirmation = offer.security.requiresExplicitApproval;
+  const isPostInspection = offer.confirmationStage === "AFTER_INSPECTION";
   return (
     <div
       className="dd-dialog-backdrop fixed inset-0 z-50 grid place-items-center bg-slate-950/50 p-5"
@@ -2701,7 +2709,9 @@ function NearbyReceiveDialog({
       <div className="dd-dialog dd-nearby-dialog w-full max-w-md rounded-2xl bg-white p-6">
         <Download className="text-blue-700" aria-hidden="true" />
         <h2 id="nearby-receive-title" className="mt-4 text-xl font-bold">
-          Nearby 파일을 받을까요?
+          {isPostInspection
+            ? "파일 내용을 다시 확인해 주세요"
+            : "Nearby 파일을 받을까요?"}
         </h2>
         <p className="mt-2 text-sm text-slate-600">
           <strong>{offer.deviceName}</strong> 기기가 {offer.files.length}개 파일
@@ -2718,9 +2728,48 @@ function NearbyReceiveDialog({
             <li>그 외 {offer.files.length - 4}개 파일</li>
           )}
         </ul>
-        <p className="dd-receive-safety-note">
-          승인해야만 저장을 시작하며 기존 파일은 덮어쓰지 않습니다.
-        </p>
+        <div
+          className={`dd-receive-safety-note ${needsConfirmation ? "border-amber-200 bg-amber-50 text-amber-950" : ""}`}
+        >
+          <strong>
+            {offer.security.riskLevel === "HIGH_RISK"
+              ? "주의가 필요한 파일입니다."
+              : offer.security.riskLevel === "CAUTION"
+                ? "내용을 확인할 수 없는 형식이 포함되어 있습니다."
+                : "악성코드 검사를 완료한 파일은 아닙니다."}
+          </strong>
+          <p className="mt-1">
+            DirectDrop은 악성 여부를 판정하지 않습니다. 저장 시 운영체제의 출처
+            보호 표시를 적용하며 기존 파일은 덮어쓰지 않습니다.
+          </p>
+          {offer.security.reasons.length > 0 && (
+            <ul className="mt-2 list-disc space-y-1 pl-5">
+              {offer.security.reasons.map((reason) => (
+                <li key={reason}>
+                  {fileSecurityReasonLabels[reason] ?? reason}
+                </li>
+              ))}
+            </ul>
+          )}
+          {isPostInspection && (
+            <p className="mt-2 font-semibold text-red-800">
+              전송된 실제 바이트가 처음 표시된 파일 형식과 달라 자동 저장을
+              중단했습니다.
+            </p>
+          )}
+        </div>
+        {needsConfirmation && (
+          <label className="mt-4 flex items-start gap-2 text-sm font-semibold text-slate-800">
+            <input
+              className="mt-1"
+              type="checkbox"
+              checked={securityConfirmed}
+              onChange={(event) => setSecurityConfirmed(event.target.checked)}
+            />
+            보낸 기기와 파일명을 확인했으며, DirectDrop이 이 파일의 안전성을
+            보증하지 않는다는 점을 이해했습니다.
+          </label>
+        )}
         <div className="mt-6 grid grid-cols-2 gap-3">
           <Button
             onClick={() => onDecision(false)}
@@ -2730,6 +2779,7 @@ function NearbyReceiveDialog({
           </Button>
           <Button
             onClick={() => onDecision(true)}
+            disabled={needsConfirmation && !securityConfirmed}
             className="bg-blue-600 text-white hover:bg-blue-700"
           >
             <Check aria-hidden="true" size={17} /> 받기

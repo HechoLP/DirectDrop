@@ -12,6 +12,7 @@ use tokio::{
 
 use super::{
     protocol::{FileOffset, LanFile, MAX_RELATIVE_PATH_BYTES, MAX_TRANSFER_FILES},
+    security::{apply_platform_protection, inspect_staged_files, FileSecurityAssessment},
     NearbyError,
 };
 
@@ -206,6 +207,16 @@ impl ReceiveSession {
         self.files.values().map(|file| file.offset).sum()
     }
 
+    pub async fn inspect_security(&self) -> Result<FileSecurityAssessment, NearbyError> {
+        let manifest = self
+            .file_order
+            .iter()
+            .filter_map(|file_id| self.files.get(file_id))
+            .map(|file| file.metadata.clone())
+            .collect::<Vec<_>>();
+        inspect_staged_files(&self.files_directory, &manifest).await
+    }
+
     async fn persist_state(&self) -> Result<(), NearbyError> {
         persist_resume_state(
             &self.state_path,
@@ -237,6 +248,11 @@ impl ReceiveSession {
             file.handle.sync_all().await?;
         }
         drop(self.files);
+
+        // Received content remains in the hidden staging directory until platform
+        // provenance protection succeeds. A protection failure never exposes the
+        // files in the user's download directory.
+        apply_platform_protection(&self.files_directory, &self.transfer_id).await?;
 
         let mut destinations = Vec::new();
         if self.file_order.len() == 1 && !relative_paths[0].contains('/') {
@@ -333,6 +349,11 @@ pub fn validate_manifest(files: &[LanFile]) -> Result<u64, NearbyError> {
             return Err(NearbyError::Protocol("invalid file metadata".to_owned()));
         }
         let relative = validate_relative_path(&file.relative_path)?;
+        if relative.file_name().and_then(|name| name.to_str()) != Some(file.name.as_str()) {
+            return Err(NearbyError::Protocol(
+                "display filename does not match the destination path".to_owned(),
+            ));
+        }
         if !paths.insert(relative) {
             return Err(NearbyError::Protocol("duplicate relative path".to_owned()));
         }
@@ -518,6 +539,9 @@ mod tests {
             validate_relative_path("Project/src/main.rs").unwrap(),
             PathBuf::from("Project/src/main.rs")
         );
+        let mut deceptive = file("invoice.pdf.exe", 1);
+        deceptive.name = "invoice.pdf".to_owned();
+        assert!(validate_manifest(&[deceptive]).is_err());
     }
 
     #[tokio::test]
@@ -570,6 +594,10 @@ mod tests {
         let destinations = session.complete().await.unwrap();
         assert_eq!(fs::read(root.join("safe.bin")).await.unwrap(), b"existing");
         assert_eq!(fs::read(&destinations[0]).await.unwrap(), b"data");
+        #[cfg(target_os = "macos")]
+        assert!(xattr::get(&destinations[0], "com.apple.quarantine")
+            .unwrap()
+            .is_some());
         fs::remove_dir_all(root).await.unwrap();
     }
 

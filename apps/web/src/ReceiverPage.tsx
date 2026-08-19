@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -18,6 +18,8 @@ import {
   type ShareMetadata,
 } from "@directdrop/protocol";
 import {
+  assessFileSecurity,
+  fileSecurityReasonLabels,
   formatBytes,
   formatDuration,
   type ProgressSnapshot,
@@ -70,6 +72,7 @@ export function ReceiverPage({ token }: { token: string }) {
   const [accessToken, setAccessToken] = useState<string>();
   const [progress, setProgress] = useState<ProgressSnapshot>();
   const [connectionType, setConnectionType] = useState("연결 전");
+  const [securityConfirmedFor, setSecurityConfirmedFor] = useState<string>();
   const socketRef = useRef<WebSocket | null>(null);
   const peerRef = useRef<RTCPeerConnection | null>(null);
   const senderPeerRef = useRef<string | null>(null);
@@ -84,6 +87,12 @@ export function ReceiverPage({ token }: { token: string }) {
   const disconnectTimerRef = useRef<number | undefined>(undefined);
   const phaseRef = useRef<Phase>(phase);
   const requestInFlightRef = useRef(false);
+  const security = useMemo(
+    () =>
+      metadata?.files.length ? assessFileSecurity(metadata.files) : undefined,
+    [metadata],
+  );
+  const securityConfirmed = securityConfirmedFor === token;
 
   const send = useCallback((message: object) => {
     const socket = socketRef.current;
@@ -383,6 +392,10 @@ export function ReceiverPage({ token }: { token: string }) {
 
   const startDownload = async () => {
     if (!metadata || requestInFlightRef.current) return;
+    if (security?.requiresExplicitApproval && !securityConfirmed) {
+      setError("주의 항목을 확인한 뒤 동의해 주세요.");
+      return;
+    }
     requestInFlightRef.current = true;
     try {
       savePlanRef.current = await prepareSavePlan(metadata.files);
@@ -494,6 +507,68 @@ export function ReceiverPage({ token }: { token: string }) {
             ) : (
               <div className="space-y-6">
                 <FileList files={metadata.files} />
+                {security && (
+                  <section
+                    className={`rounded-2xl border p-4 ${
+                      security.requiresExplicitApproval
+                        ? "border-amber-200 bg-amber-50 text-amber-950"
+                        : "border-slate-200 bg-white text-slate-800"
+                    }`}
+                    aria-labelledby="file-security-title"
+                  >
+                    <div className="flex items-start gap-3">
+                      <AlertTriangle
+                        className={
+                          security.requiresExplicitApproval
+                            ? "mt-0.5 shrink-0 text-amber-700"
+                            : "mt-0.5 shrink-0 text-slate-500"
+                        }
+                        aria-hidden="true"
+                        size={19}
+                      />
+                      <div>
+                        <h2 id="file-security-title" className="font-bold">
+                          {security.riskLevel === "HIGH_RISK"
+                            ? "실행될 수 있는 파일이 포함되어 있습니다."
+                            : security.riskLevel === "CAUTION"
+                              ? "내부 내용을 확인할 수 없는 파일이 있습니다."
+                              : "이 파일은 악성코드 검사를 거치지 않았습니다."}
+                        </h2>
+                        <p className="mt-1 text-sm leading-6">
+                          DirectDrop은 오탐·미탐 가능성 때문에 안전 여부를
+                          단정하지 않습니다. 보낸 사람을 확인하고 저장 후
+                          운영체제 백신으로 검사하세요.
+                        </p>
+                        {security.reasons.length > 0 && (
+                          <ul className="mt-2 list-disc space-y-1 pl-5 text-sm">
+                            {security.reasons.map((reason) => (
+                              <li key={reason}>
+                                {fileSecurityReasonLabels[reason]}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    </div>
+                    {security.requiresExplicitApproval && (
+                      <label className="mt-4 flex items-start gap-2 text-sm font-semibold">
+                        <input
+                          className="mt-1"
+                          type="checkbox"
+                          checked={securityConfirmed}
+                          onChange={(event) => {
+                            setSecurityConfirmedFor(
+                              event.target.checked ? token : undefined,
+                            );
+                            if (event.target.checked) setError(undefined);
+                          }}
+                        />
+                        보낸 사람과 파일명을 확인했으며, 이 파일의 안전성이
+                        보장되지 않는다는 점을 이해했습니다.
+                      </label>
+                    )}
+                  </section>
+                )}
                 <dl className="grid grid-cols-2 gap-3 rounded-2xl border border-slate-200 bg-white p-4 sm:grid-cols-3">
                   <div>
                     <dt className="text-xs font-semibold text-slate-500">
@@ -668,6 +743,8 @@ export function ReceiverPage({ token }: { token: string }) {
                           terminalState ||
                           phase === "complete" ||
                           !capability?.canDownload ||
+                          (security?.requiresExplicitApproval &&
+                            !securityConfirmed) ||
                           ["waiting", "connecting", "transferring"].includes(
                             phase,
                           ))
@@ -676,15 +753,18 @@ export function ReceiverPage({ token }: { token: string }) {
                     >
                       {phase === "error" ? (
                         <>
-                          <LoaderCircle aria-hidden="true" size={20} /> 다시 시도
+                          <LoaderCircle aria-hidden="true" size={20} /> 다시
+                          시도
                         </>
                       ) : phase === "complete" ? (
                         <>
-                          <CheckCircle2 aria-hidden="true" size={20} /> 저장 완료
+                          <CheckCircle2 aria-hidden="true" size={20} /> 저장
+                          완료
                         </>
                       ) : (
                         <>
-                          <Download aria-hidden="true" size={20} /> 다운로드 시작
+                          <Download aria-hidden="true" size={20} /> 다운로드
+                          시작
                         </>
                       )}
                     </Button>

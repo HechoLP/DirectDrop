@@ -6,6 +6,8 @@ import {
   type PublicFile,
 } from "@directdrop/protocol";
 import {
+  assessFileSecurity,
+  detectActiveContentKind,
   ProgressMeter,
   sha256Hex,
   throttle,
@@ -30,12 +32,21 @@ export async function verifyChunkIntegrity(
     throw new Error("CHUNK_INTEGRITY_MISMATCH");
 }
 
+export function verifyActiveContentMatchesMetadata(
+  file: PublicFile,
+  firstChunk: ArrayBuffer,
+) {
+  const detected = detectActiveContentKind(new Uint8Array(firstChunk));
+  if (detected && assessFileSecurity([file]).riskLevel !== "HIGH_RISK")
+    throw new Error(
+      "파일 내용이 표시된 확장자와 달리 실행 가능한 형식입니다. 저장을 중단했습니다. 보낸 사람에게 올바른 파일명으로 다시 공유해 달라고 요청하세요.",
+    );
+}
+
 export class IncomingTransferValidator {
   private manifestSeen = false;
   private fileIndex = 0;
-  private current:
-    | { file: PublicFile; receivedBytes: number }
-    | undefined;
+  private current: { file: PublicFile; receivedBytes: number } | undefined;
   private pendingChunk:
     | { fileId: string; offset: number; size: number; sha256: string }
     | undefined;
@@ -169,6 +180,7 @@ export function attachReceiverChannel(options: {
   const meter = new ProgressMeter();
   const publish = throttle(options.onProgress, 200);
   const validator = new IncomingTransferValidator(files);
+  const filesById = new Map(files.map((file) => [file.id, file]));
   let chain = Promise.resolve();
   let settled = false;
 
@@ -179,9 +191,7 @@ export function attachReceiverChannel(options: {
     channel.onmessage = null;
     channel.close();
     await savePlan.abort(error);
-    options.onError(
-      error instanceof Error ? error : new Error(String(error)),
-    );
+    options.onError(error instanceof Error ? error : new Error(String(error)));
   };
 
   channel.binaryType = "arraybuffer";
@@ -217,6 +227,11 @@ export function attachReceiverChannel(options: {
             : await (event.data as Blob).arrayBuffer();
         const received = validator.chunk(chunk.byteLength);
         await verifyChunkIntegrity(chunk, received.expectedSha256);
+        if (received.fileBytes === chunk.byteLength) {
+          const file = filesById.get(received.fileId);
+          if (!file) throw new Error("UNKNOWN_TRANSFER_FILE");
+          verifyActiveContentMatchesMetadata(file, chunk);
+        }
         await savePlan.write(chunk);
         channel.send(
           JSON.stringify({
